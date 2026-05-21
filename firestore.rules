@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Regras mais específicas (comentadas por enquanto):
+    
+    // Menu: Leitura pública, Escrita requer autenticação
+    // match /menu/{document=**} {
+    //   allow read: if true;
+    //   allow write: if request.auth != null;
+    // }
+    
+    // Pedidos: Leitura requer autenticação, Criação pública
+    // match /orders/{document=**} {
+    //   allow read, update, delete: if request.auth != null;
+    //   allow create: if true;
+    // }
+    
+    // Configurações da Loja
+    // match /store/{document=**} {
+    //   allow read: if true;
+    //   allow write: if request.auth != null;
+    // }
+    
+    // Teste de conexão
+    // match /_connection_test/{document=**} {
+    //   allow read, write: if true;
+    // }
+  }
+}

@@ -93,6 +93,8 @@
     color: var(--color-text);
     font-family: var(--font-sans);
     overflow-x: hidden;
+    min-height: 100dvh;
+    overscroll-behavior: none;
   }
 
   /* Textured Background */
@@ -228,4 +230,14 @@
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* iOS Zoom Prevention */
+@media screen and (max-width: 768px) {
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }

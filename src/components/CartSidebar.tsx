@@ -1,6 +1,7 @@
-import { X, Trash2, ShoppingBag, Truck } from 'lucide-react';
+import { useState } from 'react';
+import { X, Trash2, ShoppingBag, Truck, MessageSquarePlus, Check } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
-import { cn } from '../lib/utils';
+import { cn, sanitizeInput } from '../lib/utils';
 
 interface CartSidebarProps {
     isOpen: boolean;
@@ -11,9 +12,13 @@ interface CartSidebarProps {
 export function CartSidebar({ isOpen, onClose, onCheckout }: CartSidebarProps) {
     const items = useCartStore((state) => state.items);
     const removeItem = useCartStore((state) => state.removeItem);
+    const updateItemObservation = useCartStore((state) => state.updateItemObservation);
     const subtotal = useCartStore((state) => state.getSubtotal());
     const deliveryFee = useCartStore((state) => state.getDeliveryFee());
     const total = useCartStore((state) => state.getTotal());
+
+    const [editingItemId, setEditingItemId] = useState<string | null>(null);
+    const [editingNote, setEditingNote] = useState('');
 
     const isFreeDelivery = deliveryFee === 0;
     const amountToFreeDelivery = 100 - subtotal;
@@ -87,29 +92,70 @@ export function CartSidebar({ isOpen, onClose, onCheckout }: CartSidebarProps) {
                         items.map((item, index) => (
                             <div
                                 key={item.id}
-                                className="glass-card p-4 flex gap-3"
+                                className="glass-card p-4 mx-1"
                                 style={{
                                     animationDelay: `${index * 50}ms`,
                                     animation: 'slide-up 0.3s ease-out forwards'
                                 }}
                             >
-                                <div className="flex-1">
-                                    <h4 className="text-text font-semibold text-sm leading-tight">{item.name}</h4>
-                                    {item.observation && (
-                                        <p className="text-xs text-text-muted mt-1 bg-background px-2 py-1 rounded inline-block">
-                                            {item.observation}
-                                        </p>
-                                    )}
-                                    <div className="text-primary font-bold text-base mt-2">
-                                        R$ {item.price.toFixed(2).replace('.', ',')}
+                                <div className="flex gap-3">
+                                    <div className="flex-1">
+                                        <h4 className="text-text font-semibold text-sm leading-tight">{item.name}</h4>
+                                        {item.observation && editingItemId !== item.id && (
+                                            <p className="text-xs text-text-muted mt-1 bg-background px-2 py-1 rounded inline-block">
+                                                {item.observation}
+                                            </p>
+                                        )}
+                                        <div className="text-primary font-bold text-base mt-2">
+                                            R$ {item.price.toFixed(2).replace('.', ',')}
+                                        </div>
                                     </div>
+                                    <button
+                                        onClick={() => removeItem(item.id)}
+                                        className="text-text-muted hover:text-secondary transition-colors self-start p-2 hover:bg-secondary/10 rounded-lg"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={() => removeItem(item.id)}
-                                    className="text-text-muted hover:text-secondary transition-colors self-start p-2 hover:bg-secondary/10 rounded-lg"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
+
+                                {editingItemId === item.id ? (
+                                    <div className="flex gap-2 items-center mt-3 animate-in fade-in slide-in-from-top-2">
+                                        <input
+                                            type="text"
+                                            value={editingNote}
+                                            onChange={(e) => setEditingNote(e.target.value)}
+                                            placeholder="Ex: Sem cebola, cortar em 8..."
+                                            className="flex-1 bg-background/50 border border-white/10 rounded px-2 py-1.5 text-sm text-text focus:outline-none focus:border-primary/50 focus:bg-background transition-colors"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    updateItemObservation(item.id, sanitizeInput(editingNote));
+                                                    setEditingItemId(null);
+                                                }
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                updateItemObservation(item.id, sanitizeInput(editingNote));
+                                                setEditingItemId(null);
+                                            }}
+                                            className="p-1.5 bg-primary/20 text-primary rounded hover:bg-primary/30 transition-colors"
+                                        >
+                                            <Check className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => {
+                                            setEditingItemId(item.id);
+                                            setEditingNote(item.observation || '');
+                                        }}
+                                        className="text-xs text-primary/80 hover:text-primary flex items-center gap-1.5 mt-2 transition-colors"
+                                    >
+                                        <MessageSquarePlus className="w-3.5 h-3.5" />
+                                        {item.observation ? 'Editar observação' : 'Adicionar observação'}
+                                    </button>
+                                )}
                             </div>
                         ))
                     )}
@@ -118,7 +164,6 @@ export function CartSidebar({ isOpen, onClose, onCheckout }: CartSidebarProps) {
                 {/* Footer */}
                 {items.length > 0 && (
                     <div className="p-5 bg-background border-t border-white/10 space-y-4">
-                        {/* Free delivery badge */}
                         {isFreeDelivery && (
                             <div className="flex items-center justify-center gap-2 bg-success/20 text-success py-2 rounded-lg animate-[glow-pulse_2s_ease-in-out_infinite]">
                                 <Truck className="w-4 h-4" />
@@ -149,6 +194,18 @@ export function CartSidebar({ isOpen, onClose, onCheckout }: CartSidebarProps) {
                         >
                             Finalizar Pedido
                         </button>
+
+                        <p className="text-center text-[10px] text-text-muted mt-2 flex items-center justify-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+                            Desenvolvido por{' '}
+                            <a
+                                href="https://nuscorre.com.br"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline flex items-center gap-1"
+                            >
+                                <img src="/nuscorre-logo.png" alt="Nuscorre" className="h-3 w-auto" />
+                            </a>
+                        </p>
                     </div>
                 )}
             </div>

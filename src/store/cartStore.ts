@@ -17,6 +17,7 @@ interface CartState {
     items: CartItem[];
     addItem: (item: Omit<CartItem, 'id'>) => void;
     removeItem: (id: string) => void;
+    updateItemObservation: (id: string, observation: string) => void;
     clearCart: () => void;
     getSubtotal: () => number;
     getDeliveryFee: () => number;
@@ -37,6 +38,13 @@ export const useCartStore = create<CartState>()(
                     items: state.items.filter((i) => i.id !== id)
                 }));
             },
+            updateItemObservation: (id, observation) => {
+                set((state) => ({
+                    items: state.items.map((item) =>
+                        item.id === id ? { ...item, observation } : item
+                    )
+                }));
+            },
             clearCart: () => set({ items: [] }),
             getSubtotal: () => {
                 const { items } = get();
@@ -44,9 +52,9 @@ export const useCartStore = create<CartState>()(
             },
             getDeliveryFee: () => {
                 const subtotal = get().getSubtotal();
-                // If subtotal > 100, free shipping. Else 5.
+                // If subtotal > 100, free shipping. Else 6.
                 // NOTE: Prompt says "Isenção: se subtotal > 100".
-                return subtotal >= 100 ? 0 : 5;
+                return subtotal >= 100 ? 0 : 6;
             },
             getTotal: () => {
                 return get().getSubtotal() + get().getDeliveryFee();

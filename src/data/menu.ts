@@ -23,6 +23,14 @@ export interface PatternColors {
     secondary?: string;
 }
 
+export interface ProductOption {
+    id: string;
+    name: string;
+    description?: string;
+    price?: number;
+    available?: boolean;
+}
+
 export interface Product {
     id: string;
     name: string;
@@ -32,6 +40,8 @@ export interface Product {
     image: string;
     visualPattern?: PatternType;
     patternColors?: PatternColors;
+    available?: boolean;
+    options?: ProductOption[];
 }
 
 export interface Category {
@@ -104,11 +114,22 @@ export const menu: Category[] = [
         id: 'bebidas',
         title: 'Bebidas',
         items: [
-            { id: 'beb1', name: 'Refrigerante 1L', description: 'Coca-Cola, Antártica ou Pepsi.', price: 9, type: 'drink', image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=400&auto=format&fit=crop' },
-            { id: 'beb2', name: 'Heineken 600ml', description: 'Cerveja premium importada.', price: 20, type: 'drink', image: 'https://images.unsplash.com/photo-1618885472179-5e474019f2a9?q=80&w=400&auto=format&fit=crop' },
-            { id: 'beb3', name: 'Stella Artois 600ml', description: 'Cerveja belga premium.', price: 17, type: 'drink', image: 'https://images.unsplash.com/photo-1618885472179-5e474019f2a9?q=80&w=400&auto=format&fit=crop' },
-            { id: 'beb4', name: 'Heineken Long Neck', description: 'Cerveja 330ml.', price: 10, type: 'drink', image: 'https://images.unsplash.com/photo-1618885472179-5e474019f2a9?q=80&w=400&auto=format&fit=crop' },
-            { id: 'beb5', name: 'Amstel Lata', description: 'Cerveja 350ml.', price: 6, type: 'drink', image: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=400&auto=format&fit=crop' },
+            {
+                id: 'beb1',
+                name: 'Refrigerante 1L',
+                description: 'Coca-Cola, Guaraná Antarctica ou Pepsi.',
+                price: 10,
+                type: 'drink',
+                image: '/images/refrigerante.png',
+                options: [
+                    { id: 'coca', name: 'Coca-Cola', available: true },
+                    { id: 'coca-zero', name: 'Coca-Cola Zero', available: true },
+                    { id: 'guarana', name: 'Guaraná Antarctica', available: true },
+                    { id: 'guarana-zero', name: 'Guaraná Antarctica Zero', available: true },
+                    { id: 'pepsi', name: 'Pepsi', available: true },
+                    { id: 'pepsi-zero', name: 'Pepsi Zero', available: true },
+                ]
+            }
         ]
     }
 ];

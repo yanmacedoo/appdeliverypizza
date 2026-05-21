@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { getPizzasByCategory, type Product } from '../data/menu';
+import { type Product } from '../data/menu';
+import { useMenuStore } from '../store/menuStore';
 import { cn } from '../lib/utils';
 
 interface FlavorSidebarProps {
@@ -11,6 +12,7 @@ interface FlavorSidebarProps {
 }
 
 export function FlavorSidebar({ onSelectFlavor, selectedFlavors, disabled, stepLabel }: FlavorSidebarProps) {
+    const { getPizzasByCategory } = useMenuStore();
     const categories = getPizzasByCategory();
     const [openCategory, setOpenCategory] = useState<string>(categories[0]?.category || '');
 
@@ -52,7 +54,7 @@ export function FlavorSidebar({ onSelectFlavor, selectedFlavors, disabled, stepL
                         <div
                             className={cn(
                                 "overflow-hidden transition-all duration-300",
-                                openCategory === category ? "max-h-[600px]" : "max-h-0"
+                                openCategory === category ? "max-h-[2000px]" : "max-h-0"
                             )}
                         >
                             <div className="bg-background p-2 space-y-1">

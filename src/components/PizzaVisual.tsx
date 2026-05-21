@@ -6,15 +6,16 @@ interface FlavorInfo {
 }
 
 interface PizzaVisualProps {
-    mode: 'inteira' | 'meia';
+    mode: 'inteira' | 'meia' | 'tercos';
     leftFlavor?: FlavorInfo | null;
     rightFlavor?: FlavorInfo | null;
-    activeHalf?: 'left' | 'right' | null;
+    thirdFlavor?: FlavorInfo | null;
+    activeHalf?: 'left' | 'right' | 'slice1' | 'slice2' | 'slice3' | null;
     size?: number;
 }
 
 // Generate positions covering the ENTIRE cheese circle using a grid approach
-function generateToppingPositions(count: number, radius: number, center: number, halfSide?: 'left' | 'right') {
+function generateToppingPositions(count: number, radius: number, center: number, halfSide?: 'left' | 'right' | 'slice1' | 'slice2' | 'slice3') {
     const positions: { x: number; y: number; size: number; rotation: number }[] = [];
 
     // Use actual radius minus small padding
@@ -41,35 +42,25 @@ function generateToppingPositions(count: number, radius: number, center: number,
             let x = center + ringRadius * Math.cos(angle);
             let y = center + ringRadius * Math.sin(angle);
 
-            // For half pizza mode
+            // Filtering logic for partial pizzas
+            let keep = true;
             if (halfSide === 'left') {
-                // Only use left side, mirror right positions
-                if (x >= center) {
-                    x = center - (x - center) - 10;
-                }
-                // Add some offset from center line
-                if (x > center - 15) x = center - 20 - Math.random() * 30;
+                if (x > center) keep = false;
             } else if (halfSide === 'right') {
-                // Only use right side, mirror left positions
-                if (x <= center) {
-                    x = center + (center - x) + 10;
-                }
-                // Add some offset from center line
-                if (x < center + 15) x = center + 20 + Math.random() * 30;
+                if (x < center) keep = false;
+            } else if (halfSide === 'slice1') { // 0-120
+                // Handled by clip path, generating full circle is simpler visually, but less optimal. 
+                // We will generate full circle and let SVG clipPath handle the cutting.
             }
 
-            // Keep y within bounds
-            const maxY = Math.sqrt(effectiveRadius * effectiveRadius - Math.pow(Math.abs(x - center), 2));
-            if (Math.abs(y - center) > maxY) {
-                y = center + (y > center ? maxY * 0.9 : -maxY * 0.9);
+            if (keep) {
+                positions.push({
+                    x,
+                    y,
+                    size: 7 + (idx % 3) * 2,
+                    rotation: (i * 45 + idx * 30) % 360
+                });
             }
-
-            positions.push({
-                x,
-                y,
-                size: 7 + (idx % 3) * 2,
-                rotation: (i * 45 + idx * 30) % 360
-            });
         }
         idx++;
     }
@@ -135,10 +126,10 @@ function renderToppings(
     _userColors: PatternColors,
     center: number,
     innerRadius: number,
-    halfSide?: 'left' | 'right'
+    halfSide?: 'left' | 'right' | 'slice1' | 'slice2' | 'slice3'
 ) {
     const colors = realisticColors[pattern] || realisticColors.cheese;
-    const positions = generateToppingPositions(28, innerRadius, center, halfSide);
+    const positions = generateToppingPositions(32, innerRadius, center, halfSide);
 
     switch (pattern) {
         case 'pepperoni':
@@ -579,6 +570,7 @@ export function PizzaVisual({
     mode,
     leftFlavor,
     rightFlavor,
+    thirdFlavor,
     activeHalf,
     size = 260
 }: PizzaVisualProps) {
@@ -605,6 +597,21 @@ export function PizzaVisual({
                     <clipPath id="rightHalfClip">
                         <rect x={center} y="0" width={center} height={size} />
                     </clipPath>
+
+                    {/* 3 Flavors Clip Paths */}
+                    {/* Slice 1: 0 to 120 degrees (Right-ish) */}
+                    <clipPath id="slice1Clip">
+                        <path d={`M ${center} ${center} L ${center} 0 A ${center} ${center} 0 0 1 ${center + Math.sin(120 * Math.PI / 180) * center} ${center - Math.cos(120 * Math.PI / 180) * center} Z`} />
+                    </clipPath>
+                    {/* Slice 2: 120 to 240 degrees (Bottom) */}
+                    <clipPath id="slice2Clip">
+                        <path d={`M ${center} ${center} L ${center + Math.sin(120 * Math.PI / 180) * center} ${center - Math.cos(120 * Math.PI / 180) * center} A ${center} ${center} 0 0 1 ${center + Math.sin(240 * Math.PI / 180) * center} ${center - Math.cos(240 * Math.PI / 180) * center} Z`} />
+                    </clipPath>
+                    {/* Slice 3: 240 to 360 degrees (Top-Left) */}
+                    <clipPath id="slice3Clip">
+                        <path d={`M ${center} ${center} L ${center + Math.sin(240 * Math.PI / 180) * center} ${center - Math.cos(240 * Math.PI / 180) * center} A ${center} ${center} 0 0 1 ${center} 0 Z`} />
+                    </clipPath>
+
                     <clipPath id="pizzaClip">
                         <circle cx={center} cy={center} r={cheeseRadius} />
                     </clipPath>
@@ -690,9 +697,61 @@ export function PizzaVisual({
                     </>
                 )}
 
-                {/* Active half highlight */}
-                {mode === 'meia' && activeHalf && (
-                    <g clipPath={activeHalf === 'left' ? 'url(#leftHalfClip)' : 'url(#rightHalfClip)'}>
+                {/* Toppings for tercos mode */}
+                {mode === 'tercos' && (
+                    <>
+                        {leftFlavor && (
+                            <g clipPath="url(#slice1Clip)">
+                                <g clipPath="url(#pizzaClip)">
+                                    {renderToppings(leftFlavor.pattern, leftFlavor.colors, center, cheeseRadius, 'slice1')}
+                                </g>
+                            </g>
+                        )}
+                        {rightFlavor && (
+                            <g clipPath="url(#slice2Clip)">
+                                <g clipPath="url(#pizzaClip)">
+                                    {renderToppings(rightFlavor.pattern, rightFlavor.colors, center, cheeseRadius, 'slice2')}
+                                </g>
+                            </g>
+                        )}
+                        {thirdFlavor && (
+                            <g clipPath="url(#slice3Clip)">
+                                <g clipPath="url(#pizzaClip)">
+                                    {renderToppings(thirdFlavor.pattern, thirdFlavor.colors, center, cheeseRadius, 'slice3')}
+                                </g>
+                            </g>
+                        )}
+
+                        {/* Dividing lines for 3 Flavors */}
+                        {[0, 120, 240].map(angle => {
+                            const rad = (angle - 90) * Math.PI / 180; // -90 to start from top
+                            const x2 = center + (innerRadius - 5) * Math.cos(rad);
+                            const y2 = center + (innerRadius - 5) * Math.sin(rad);
+                            return (
+                                <line
+                                    key={angle}
+                                    x1={center}
+                                    y1={center}
+                                    x2={x2}
+                                    y2={y2}
+                                    stroke="#8B0000"
+                                    strokeWidth="3"
+                                    strokeLinecap="round"
+                                />
+                            );
+                        })}
+                    </>
+                )}
+
+                {/* Active slice highlight */}
+                {activeHalf && (
+                    <g clipPath={
+                        activeHalf === 'left' ? 'url(#leftHalfClip)' :
+                            activeHalf === 'right' ? 'url(#rightHalfClip)' :
+                                activeHalf === 'slice1' ? 'url(#slice1Clip)' :
+                                    activeHalf === 'slice2' ? 'url(#slice2Clip)' :
+                                        'url(#slice3Clip)'
+                    }>
                         <circle
                             cx={center}
                             cy={center}

@@ -1,4 +1,4 @@
-import { ShoppingCart, Flame } from 'lucide-react';
+import { ShoppingCart } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 
 interface HeaderProps {
@@ -17,10 +17,11 @@ export function Header({ onOpenCart }: HeaderProps) {
             <div className="relative max-w-6xl mx-auto h-16 flex items-center justify-between px-4">
                 {/* Logo */}
                 <div className="flex items-center gap-2">
-                    <div className="relative">
-                        <Flame className="w-8 h-8 text-secondary" />
-                        <Flame className="w-8 h-8 text-accent absolute top-0 left-0 opacity-50 animate-pulse" />
-                    </div>
+                    <img
+                        src="/images/logo.png"
+                        alt="Fome de Pizza"
+                        className="w-10 h-10 object-contain brightness-0 invert sepia saturate-[10] hue-rotate-[5deg]"
+                    />
                     <div className="font-display text-2xl tracking-wider">
                         <span className="text-text">FOME DE </span>
                         <span className="text-primary text-glow">PIZZA</span>
