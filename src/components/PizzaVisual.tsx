@@ -18,29 +18,32 @@ interface PizzaVisualProps {
 function generateToppingPositions(count: number, radius: number, center: number, halfSide?: 'left' | 'right' | 'slice1' | 'slice2' | 'slice3') {
     const positions: { x: number; y: number; size: number; rotation: number }[] = [];
 
-    // Use actual radius minus small padding
-    const effectiveRadius = radius * 0.92;
+    // Use actual radius minus padding to avoid toppings on the crust
+    const effectiveRadius = radius * 0.88;
 
-    // Generate positions in concentric rings that cover entire area
+    // Concentric rings to distribute toppings naturally
     const rings = [
-        { r: 0, items: 1 },
-        { r: 0.25, items: 6 },
-        { r: 0.5, items: 10 },
-        { r: 0.75, items: 14 },
-        { r: 1.0, items: 16 }
+        { r: 0.15, items: 3 },
+        { r: 0.45, items: 8 },
+        { r: 0.72, items: 13 },
+        { r: 0.95, items: 18 }
     ];
 
     let idx = 0;
     for (const ring of rings) {
         const ringRadius = effectiveRadius * ring.r;
         const angleStep = 360 / ring.items;
-        const startAngle = (idx % 2) * (angleStep / 2); // Offset alternate rings
+        const startAngle = (idx % 2) * (angleStep / 2) + 15; // Jitter start angle
 
         for (let i = 0; i < ring.items && positions.length < count; i++) {
             const angle = (startAngle + i * angleStep) * (Math.PI / 180);
 
-            let x = center + ringRadius * Math.cos(angle);
-            let y = center + ringRadius * Math.sin(angle);
+            // Add slight randomness (jitter) to coordinates for organic placement
+            const jitterX = (Math.sin(angle * 5) * 3);
+            const jitterY = (Math.cos(angle * 5) * 3);
+
+            let x = center + ringRadius * Math.cos(angle) + jitterX;
+            let y = center + ringRadius * Math.sin(angle) + jitterY;
 
             // Filtering logic for partial pizzas
             let keep = true;
@@ -48,17 +51,14 @@ function generateToppingPositions(count: number, radius: number, center: number,
                 if (x > center) keep = false;
             } else if (halfSide === 'right') {
                 if (x < center) keep = false;
-            } else if (halfSide === 'slice1') { // 0-120
-                // Handled by clip path, generating full circle is simpler visually, but less optimal. 
-                // We will generate full circle and let SVG clipPath handle the cutting.
             }
 
             if (keep) {
                 positions.push({
                     x,
                     y,
-                    size: 7 + (idx % 3) * 2,
-                    rotation: (i * 45 + idx * 30) % 360
+                    size: 6 + (idx % 3) * 1.5,
+                    rotation: (i * 35 + idx * 55) % 360
                 });
             }
         }
@@ -68,496 +68,598 @@ function generateToppingPositions(count: number, radius: number, center: number,
     return positions;
 }
 
+// Generate fine black pepper/oregano flakes to scatter across the whole pizza
+function generateOreganoFlakes(center: number, radius: number, count = 120) {
+    const flakes: { x: number; y: number; r: number; color: string; rot: number }[] = [];
+    const colors = ['#2E5A1C', '#1D3B10', '#1F1F1F', '#3B422B'];
 
-// REALISTIC colors based on actual ingredients
-const realisticColors: Record<PatternType, { primary: string; secondary: string; stroke: string }> = {
-    // Calabresa - burgundy-red sausage with darker spots
-    pepperoni: { primary: '#8B2323', secondary: '#CD3333', stroke: '#5C1515' },
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * radius * 0.9;
+        flakes.push({
+            x: center + dist * Math.cos(angle),
+            y: center + dist * Math.sin(angle),
+            r: 0.6 + Math.random() * 0.8,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            rot: Math.random() * 360
+        });
+    }
+    return flakes;
+}
 
-    // Frango - cream/beige shredded chicken with catupiry
-    chicken: { primary: '#E8D4B8', secondary: '#FFF8E7', stroke: '#C4A77D' },
+// Generate wood-fire char marks for the crust
+function generateCharMarks(center: number, outerRadius: number, count = 8) {
+    const marks: { x: number; y: number; rx: number; ry: number; rot: number }[] = [];
+    for (let i = 0; i < count; i++) {
+        const angle = (i * (360 / count) + Math.random() * 20) * (Math.PI / 180);
+        // Place them right on the crust rim
+        const dist = outerRadius - 4 - Math.random() * 3;
+        marks.push({
+            x: center + dist * Math.cos(angle),
+            y: center + dist * Math.sin(angle),
+            rx: 3 + Math.random() * 5,
+            ry: 2 + Math.random() * 2,
+            rot: (angle * 180 / Math.PI) + 90
+        });
+    }
+    return marks;
+}
 
-    // Queijos - various cheese colors (cream, yellow, white)
-    cheese: { primary: '#FFF8DC', secondary: '#FFE4B5', stroke: '#D4AA00' },
-
-    // Presunto - salmon pink ham
-    ham: { primary: '#F4A4A4', secondary: '#FFCCCC', stroke: '#CC6666' },
-
-    // Atum - gray-brown tuna
-    tuna: { primary: '#8B7D6B', secondary: '#A09080', stroke: '#5C5248' },
-
-    // Milho - golden yellow corn kernels
-    corn: { primary: '#FFD700', secondary: '#FFF44F', stroke: '#DAA520' },
-
-    // Manjericão - fresh green basil + red tomatoes
-    basil: { primary: '#228B22', secondary: '#E53935', stroke: '#145214' },
-
-    // Portuguesa - mix (ham pink, olive black, egg yellow, vegetables)
-    vegetables: { primary: '#F4A4A4', secondary: '#2D2D2D', stroke: '#CC6666' },
-
-    // Camarão - coral pink shrimp
-    shrimp: { primary: '#FA8072', secondary: '#FFA07A', stroke: '#E9573F' },
-
-    // Carne seca - dark brown dried meat
-    meat: { primary: '#5D3A1A', secondary: '#8B5A2B', stroke: '#3D2512' },
-
-    // Bacon - reddish-brown with fat stripes
-    bacon: { primary: '#8B0000', secondary: '#FFC0CB', stroke: '#5C0000' },
-
-    // Palmito - white/cream heart of palm
-    palmito: { primary: '#FFFAF0', secondary: '#F5F5DC', stroke: '#D4D4AA' },
-
-    // Chocolate - rich dark brown
-    chocolate: { primary: '#3D1C0B', secondary: '#5D3A1A', stroke: '#2B1408' },
-
-    // Doce de leite - caramel tan
-    dulce: { primary: '#C69C6D', secondary: '#E0B88A', stroke: '#996633' },
-
-    // Goiabada - deep red-pink guava
-    guava: { primary: '#C41E3A', secondary: '#E75480', stroke: '#8B0A1A' },
-
-    // Coco - white flakes
-    coconut: { primary: '#FFFFFF', secondary: '#F8F8F8', stroke: '#CCCCCC' },
-};
-
-// Render realistic toppings
+// Render realistic toppings with SVG filters and high fidelity styles
 function renderToppings(
     pattern: PatternType,
-    _userColors: PatternColors,
     center: number,
     innerRadius: number,
     halfSide?: 'left' | 'right' | 'slice1' | 'slice2' | 'slice3'
 ) {
-    const colors = realisticColors[pattern] || realisticColors.cheese;
-    const positions = generateToppingPositions(32, innerRadius, center, halfSide);
+    const positions = generateToppingPositions(38, innerRadius, center, halfSide);
 
     switch (pattern) {
         case 'pepperoni':
-            // Calabresa - round slices with darker center
+            // Calabresa - Rich reddish slices with fat pooling and toasted rims
             return positions.slice(0, 16).map((pos, i) => (
-                <g key={i}>
+                <g key={i} filter="url(#toppingShadow)">
+                    {/* Darker toasted bottom rim */}
                     <circle
                         cx={pos.x}
                         cy={pos.y}
-                        r={pos.size + 2}
-                        fill={colors.primary}
-                        stroke={colors.stroke}
+                        r={pos.size * 1.8 + 0.5}
+                        fill="#5C0C0B"
+                    />
+                    {/* Main pepperoni slice with gradient */}
+                    <circle
+                        cx={pos.x}
+                        cy={pos.y}
+                        r={pos.size * 1.8}
+                        fill="url(#calabresaGrad)"
+                    />
+                    {/* Small fat spots and spices */}
+                    <circle cx={pos.x - pos.size * 0.4} cy={pos.y - pos.size * 0.3} r={1.5} fill="#FFA07A" opacity="0.65" />
+                    <circle cx={pos.x + pos.size * 0.5} cy={pos.y + pos.size * 0.2} r={1} fill="#FFD700" opacity="0.5" />
+                    <circle cx={pos.x - pos.size * 0.2} cy={pos.y + pos.size * 0.5} r={0.8} fill="#2D2D2D" opacity="0.7" />
+                    <circle cx={pos.x + pos.size * 0.2} cy={pos.y - pos.size * 0.6} r={1.2} fill="#FFA07A" opacity="0.5" />
+                    
+                    {/* Slight cupping shadow to make it look 3D and bowl-like */}
+                    <circle
+                        cx={pos.x + 0.5}
+                        cy={pos.y + 0.5}
+                        r={pos.size * 1.3}
+                        fill="none"
+                        stroke="#4A0505"
                         strokeWidth="1.5"
+                        opacity="0.4"
                     />
-                    <circle
-                        cx={pos.x}
-                        cy={pos.y}
-                        r={pos.size * 0.5}
-                        fill={colors.secondary}
-                        opacity="0.6"
-                    />
-                    {/* Fat spots */}
-                    <circle cx={pos.x - 3} cy={pos.y - 2} r={2} fill="#FFEEEE" opacity="0.5" />
                 </g>
             ));
 
         case 'chicken':
-            // Frango desfiado - shredded strips
-            return positions.slice(0, 20).map((pos, i) => (
-                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
-                    <ellipse
-                        cx={pos.x}
-                        cy={pos.y}
-                        rx={pos.size * 1.6}
-                        ry={pos.size * 0.4}
-                        fill={colors.primary}
-                        stroke={colors.stroke}
-                        strokeWidth="1"
-                    />
-                    {/* Catupiry on top */}
-                    {i % 3 === 0 && (
-                        <ellipse
-                            cx={pos.x}
-                            cy={pos.y}
-                            rx={pos.size * 0.8}
-                            ry={pos.size * 0.25}
-                            fill={colors.secondary}
-                            opacity="0.8"
-                        />
-                    )}
+            // Frango desfiado - Shredded realistic chicken strings + Catupiry swirls
+            return (
+                <g filter="url(#toppingShadow)">
+                    {/* Shredded chicken shreds */}
+                    {positions.slice(0, 24).map((pos, i) => (
+                        <g key={`chicken-${i}`} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
+                            {/* main shred */}
+                            <path
+                                d={`M ${pos.x - pos.size * 1.5} ${pos.y} Q ${pos.x} ${pos.y - 2}, ${pos.x + pos.size * 1.5} ${pos.y + 1}`}
+                                fill="none"
+                                stroke="#D2B48C"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                            />
+                            {/* lighter inner shred */}
+                            <path
+                                d={`M ${pos.x - pos.size * 1.1} ${pos.y - 0.5} Q ${pos.x} ${pos.y - 1.5}, ${pos.x + pos.size * 1.1} ${pos.y}`}
+                                fill="none"
+                                stroke="#F5DEB3"
+                                strokeWidth="1.2"
+                                strokeLinecap="round"
+                            />
+                            {/* brown toasted bits */}
+                            {i % 4 === 0 && (
+                                <circle cx={pos.x + pos.size * 0.8} cy={pos.y} r={1.2} fill="#8B4513" />
+                            )}
+                        </g>
+                    ))}
+                    
+                    {/* Catupiry Requeijão lines layered over the chicken */}
+                    {positions.slice(0, 8).map((pos, i) => (
+                        <g key={`catupiry-${i}`} transform={`rotate(${pos.rotation * 0.4} ${pos.x} ${pos.y})`}>
+                            {/* Creamy yellow requeijão body */}
+                            <path
+                                d={`M ${pos.x - 20} ${pos.y - 2} Q ${pos.x} ${pos.y - 8}, ${pos.x + 20} ${pos.y - 2}`}
+                                fill="none"
+                                stroke="#FFFEE0"
+                                strokeWidth="5.5"
+                                strokeLinecap="round"
+                                opacity="0.95"
+                            />
+                            {/* White shiny peak */}
+                            <path
+                                d={`M ${pos.x - 17} ${pos.y - 3} Q ${pos.x} ${pos.y - 7.5}, ${pos.x + 17} ${pos.y - 3}`}
+                                fill="none"
+                                stroke="#FFFFFF"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                            />
+                        </g>
+                    ))}
                 </g>
-            ));
+            );
 
         case 'cheese':
-            // Queijos - melted cheese blobs
-            return positions.slice(0, 14).map((pos, i) => (
-                <g key={i}>
-                    <ellipse
-                        cx={pos.x}
-                        cy={pos.y}
-                        rx={pos.size * 2}
-                        ry={pos.size * 1.3}
-                        fill={i % 2 === 0 ? colors.primary : colors.secondary}
-                        stroke={colors.stroke}
-                        strokeWidth="1"
-                        opacity="0.85"
-                    />
+            // Quatro Queijos - Melted provolone patches, mozzarella pools, and blue gorgonzola crumbs
+            return (
+                <g filter="url(#toppingShadow)">
+                    {/* Melted Cheddar/Provolone Pools */}
+                    {positions.slice(0, 10).map((pos, i) => (
+                        <path
+                            key={`pool-${i}`}
+                            d={`M ${pos.x - 18} ${pos.y} Q ${pos.x - 8} ${pos.y - 12}, ${pos.x + 12} ${pos.y - 4} Q ${pos.x + 18} ${pos.y + 10}, ${pos.x - 5} ${pos.y + 8} Z`}
+                            fill={i % 2 === 0 ? "#FFC04D" : "#FFE082"}
+                            opacity="0.8"
+                            stroke="#E0A800"
+                            strokeWidth="0.8"
+                        />
+                    ))}
+                    {/* Gorgonzola green-blue spots */}
+                    {positions.slice(10, 22).map((pos, i) => (
+                        <circle
+                            key={`gorg-${i}`}
+                            cx={pos.x}
+                            cy={pos.y}
+                            r={3 + (i % 3)}
+                            fill="#556B2F"
+                            stroke="#3E4F22"
+                            strokeWidth="0.5"
+                            opacity="0.9"
+                        />
+                    ))}
+                    {/* White creamy pools */}
+                    {positions.slice(22, 30).map((pos, i) => (
+                        <ellipse
+                            key={`white-${i}`}
+                            cx={pos.x}
+                            cy={pos.y}
+                            rx={12}
+                            ry={8}
+                            fill="#FFFFF0"
+                            opacity="0.85"
+                            filter="blur(1px)"
+                        />
+                    ))}
                 </g>
-            ));
+            );
 
         case 'ham':
-            // Presunto - square/rectangular slices
+            // Presunto - Pink wavy square chunks with grilled edges
             return positions.slice(0, 16).map((pos, i) => (
-                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
+                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`} filter="url(#toppingShadow)">
+                    {/* Toasted underside shadow */}
                     <rect
-                        x={pos.x - pos.size * 1.3}
-                        y={pos.y - pos.size * 0.9}
-                        width={pos.size * 2.6}
-                        height={pos.size * 1.8}
-                        rx={3}
-                        fill={colors.primary}
-                        stroke={colors.stroke}
-                        strokeWidth="1.5"
+                        x={pos.x - pos.size * 1.5 - 0.5}
+                        y={pos.y - pos.size * 1.1 - 0.5}
+                        width={pos.size * 3 + 1}
+                        height={pos.size * 2.2 + 1}
+                        rx={2}
+                        fill="#A65454"
                     />
-                    {/* Fat marbling */}
-                    <line
-                        x1={pos.x - pos.size * 0.8}
-                        y1={pos.y}
-                        x2={pos.x + pos.size * 0.8}
-                        y2={pos.y}
-                        stroke={colors.secondary}
-                        strokeWidth="2"
-                        opacity="0.6"
+                    {/* Main ham piece */}
+                    <rect
+                        x={pos.x - pos.size * 1.5}
+                        y={pos.y - pos.size * 1.1}
+                        width={pos.size * 3}
+                        height={pos.size * 2.2}
+                        rx={1.5}
+                        fill="#F29494"
                     />
+                    {/* Fatty stripes */}
+                    <path
+                        d={`M ${pos.x - pos.size * 1.1} ${pos.y - pos.size * 0.4} Q ${pos.x} ${pos.y - pos.size * 0.2}, ${pos.x + pos.size * 1.1} ${pos.y - pos.size * 0.5}`}
+                        fill="none"
+                        stroke="#FFD1D1"
+                        strokeWidth="1.8"
+                        opacity="0.65"
+                    />
+                    {/* Brown toasted edges */}
+                    <line x1={pos.x - pos.size * 1.5} y1={pos.y - pos.size * 1.1} x2={pos.x - pos.size * 0.8} y2={pos.y - pos.size * 1.1} stroke="#7D2D2D" strokeWidth="1.2" />
+                    <line x1={pos.x + pos.size * 1.5} y1={pos.y + pos.size * 1.1} x2={pos.x + pos.size * 1.0} y2={pos.y + pos.size * 1.1} stroke="#7D2D2D" strokeWidth="1.2" />
                 </g>
             ));
 
         case 'tuna':
-            // Atum - flaky chunks
-            return positions.slice(0, 18).map((pos, i) => (
-                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
-                    <ellipse
-                        cx={pos.x}
-                        cy={pos.y}
-                        rx={pos.size * 1.4}
-                        ry={pos.size * 0.5}
-                        fill={colors.primary}
-                        stroke={colors.stroke}
+            // Atum - Flaky reddish-brown fish chunks, highly detailed
+            return positions.slice(0, 22).map((pos, i) => (
+                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`} filter="url(#toppingShadow)">
+                    {/* Flaky chunk shape */}
+                    <path
+                        d={`M ${pos.x - 12} ${pos.y + 2} 
+                           C ${pos.x - 10} ${pos.y - 7}, ${pos.x - 3} ${pos.y - 5}, ${pos.x} ${pos.y - 6}
+                           C ${pos.x + 5} ${pos.y - 7}, ${pos.x + 10} ${pos.y - 4}, ${pos.x + 12} ${pos.y + 1}
+                           C ${pos.x + 8} ${pos.y + 6}, ${pos.x} ${pos.y + 5}, ${pos.x - 8} ${pos.y + 6} Z`}
+                        fill="#A56E58"
+                        stroke="#704432"
                         strokeWidth="1"
                     />
-                    <ellipse
-                        cx={pos.x + 2}
-                        cy={pos.y - 1}
-                        rx={pos.size * 0.6}
-                        ry={pos.size * 0.2}
-                        fill={colors.secondary}
-                        opacity="0.5"
+                    {/* Lighter flakes on top */}
+                    <path
+                        d={`M ${pos.x - 8} ${pos.y - 1} C ${pos.x} ${pos.y - 3}, ${pos.x + 8} ${pos.y - 1}, ${pos.x + 6} ${pos.y + 2}`}
+                        fill="none"
+                        stroke="#C6927D"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        opacity="0.8"
                     />
+                    {/* Meat fibers (fine dark stripes) */}
+                    <line x1={pos.x - 4} y1={pos.y - 3} x2={pos.x - 2} y2={pos.y + 3} stroke="#542E1F" strokeWidth="0.8" opacity="0.6" />
+                    <line x1={pos.x + 2} y1={pos.y - 3} x2={pos.x + 4} y2={pos.y + 3} stroke="#542E1F" strokeWidth="0.8" opacity="0.6" />
                 </g>
             ));
 
         case 'corn':
-            // Milho - small round kernels scattered densely
-            return positions.slice(0, 26).map((pos, i) => (
-                <circle
-                    key={i}
-                    cx={pos.x + (i % 3) * 4 - 4}
-                    cy={pos.y + (i % 2) * 4 - 2}
-                    r={4 + (i % 2)}
-                    fill={colors.primary}
-                    stroke={colors.stroke}
-                    strokeWidth="0.8"
-                />
+            // Milho - Shiny yellow plump corn kernels with highlights
+            return positions.slice(0, 30).map((pos, i) => (
+                <g key={i} filter="url(#toppingShadow)">
+                    <ellipse
+                        cx={pos.x}
+                        cy={pos.y}
+                        rx={4.5}
+                        ry={3.2}
+                        fill="#FFD700"
+                        stroke="#D5A300"
+                        strokeWidth="0.8"
+                        transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
+                    />
+                    {/* Highlight to look juicy and 3D */}
+                    <ellipse
+                        cx={pos.x - 1.2}
+                        cy={pos.y - 0.8}
+                        rx={1.5}
+                        ry={0.8}
+                        fill="#FFFFFF"
+                        opacity="0.85"
+                        transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
+                    />
+                </g>
             ));
 
         case 'basil':
-            // Margherita - basil leaves + cherry tomatoes
+            // Margherita - Basil leaves + red tomato slices
             return (
-                <>
-                    {/* Basil leaves */}
-                    {positions.slice(0, 8).map((pos, i) => (
+                <g filter="url(#toppingShadow)">
+                    {/* Tomato Slices first (layer underneath basil) */}
+                    {positions.slice(8, 15).map((pos, i) => (
+                        <g key={`tomato-${i}`} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
+                            {/* Main tomato circle */}
+                            <circle cx={pos.x} cy={pos.y} r={15} fill="url(#tomatoGrad)" stroke="#8B0000" strokeWidth="1.2" />
+                            {/* Core structure (star/segments) */}
+                            <path d={`M ${pos.x} ${pos.y - 12} L ${pos.x} ${pos.y + 12} M ${pos.x - 12} ${pos.y} L ${pos.x + 12} ${pos.y}`} stroke="#E60000" strokeWidth="3" opacity="0.6" />
+                            {/* Seeds cavities */}
+                            <circle cx={pos.x - 6} cy={pos.y - 6} r={3.5} fill="#800000" />
+                            <circle cx={pos.x + 6} cy={pos.y - 6} r={3.5} fill="#800000" />
+                            <circle cx={pos.x - 6} cy={pos.y + 6} r={3.5} fill="#800000" />
+                            <circle cx={pos.x + 6} cy={pos.y + 6} r={3.5} fill="#800000" />
+                            {/* Yellow seeds */}
+                            <circle cx={pos.x - 6} cy={pos.y - 5.5} r={1} fill="#FFD700" />
+                            <circle cx={pos.x + 6} cy={pos.y - 6.5} r={1.2} fill="#FFD700" />
+                            <circle cx={pos.x - 5.5} cy={pos.y + 6} r={1.1} fill="#FFD700" />
+                            <circle cx={pos.x + 6.5} cy={pos.y + 5.5} r={1} fill="#FFD700" />
+                            {/* shine highlight */}
+                            <ellipse cx={pos.x - 7} cy={pos.y - 7} rx={3} ry={1} fill="#FFFFFF" opacity="0.35" transform="rotate(-30)" />
+                        </g>
+                    ))}
+                    {/* Green Basil Leaves (layer on top) */}
+                    {positions.slice(0, 10).map((pos, i) => (
                         <g key={`leaf-${i}`} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
-                            <ellipse
-                                cx={pos.x}
-                                cy={pos.y}
-                                rx={pos.size * 1.4}
-                                ry={pos.size * 0.7}
-                                fill={colors.primary}
-                                stroke="#145214"
+                            {/* Leaf shape path (wavy) */}
+                            <path
+                                d={`M ${pos.x - 16} ${pos.y} 
+                                   Q ${pos.x - 6} ${pos.y - 12}, ${pos.x + 16} ${pos.y - 1} 
+                                   Q ${pos.x - 6} ${pos.y + 11}, ${pos.x - 16} ${pos.y}`}
+                                fill="#2A7A2A"
+                                stroke="#144A14"
                                 strokeWidth="1"
                             />
                             {/* Leaf vein */}
-                            <line
-                                x1={pos.x - pos.size}
-                                y1={pos.y}
-                                x2={pos.x + pos.size}
-                                y2={pos.y}
-                                stroke="#1a6b1a"
-                                strokeWidth="1"
-                                opacity="0.5"
+                            <path
+                                d={`M ${pos.x - 14} ${pos.y} Q ${pos.x} ${pos.y - 1}, ${pos.x + 12} ${pos.y - 1}`}
+                                fill="none"
+                                stroke="#52A852"
+                                strokeWidth="1.2"
+                                opacity="0.65"
                             />
+                            {/* Small veins */}
+                            <path d={`M ${pos.x - 5} ${pos.y} L ${pos.x - 2} ${pos.y - 4}`} stroke="#52A852" strokeWidth="0.8" opacity="0.5" />
+                            <path d={`M ${pos.x + 2} ${pos.y} L ${pos.x + 5} ${pos.y - 4}`} stroke="#52A852" strokeWidth="0.8" opacity="0.5" />
+                            <path d={`M ${pos.x - 2} ${pos.y} L ${pos.x} ${pos.y + 4}`} stroke="#52A852" strokeWidth="0.8" opacity="0.5" />
                         </g>
                     ))}
-                    {/* Cherry tomatoes */}
-                    {positions.slice(8, 15).map((pos, i) => (
-                        <g key={`tomato-${i}`}>
-                            <circle
-                                cx={pos.x}
-                                cy={pos.y}
-                                r={7}
-                                fill={colors.secondary}
-                                stroke="#B22222"
-                                strokeWidth="1.5"
-                            />
-                            {/* Highlight */}
-                            <ellipse cx={pos.x - 2} cy={pos.y - 2} rx={2.5} ry={1.5} fill="rgba(255,255,255,0.4)" />
-                        </g>
-                    ))}
-                </>
+                </g>
             );
 
         case 'vegetables':
-            // Portuguesa - ham, olives, eggs, onions
-            return positions.slice(0, 22).map((pos, i) => {
-                if (i % 4 === 0) {
-                    // Olives (black)
-                    return (
-                        <g key={i}>
-                            <circle
-                                cx={pos.x}
-                                cy={pos.y}
-                                r={6}
-                                fill="#1a1a1a"
-                                stroke="#000"
-                                strokeWidth="1"
-                            />
-                            {/* Pimento */}
-                            <circle cx={pos.x} cy={pos.y} r={2.5} fill="#CC0000" />
-                        </g>
-                    );
-                } else if (i % 4 === 1) {
-                    // Egg (yellow center)
-                    return (
-                        <g key={i}>
-                            <circle cx={pos.x} cy={pos.y} r={8} fill="#FFFDD0" stroke="#E6B800" strokeWidth="1" />
-                            <circle cx={pos.x} cy={pos.y} r={4} fill="#FFD700" />
-                        </g>
-                    );
-                } else if (i % 4 === 2) {
-                    // Onion rings
-                    return (
-                        <circle
-                            key={i}
-                            cx={pos.x}
-                            cy={pos.y}
-                            r={7}
-                            fill="none"
-                            stroke="#DDA0DD"
-                            strokeWidth="3"
-                        />
-                    );
-                } else {
-                    // Ham pieces
-                    return (
-                        <rect
-                            key={i}
-                            x={pos.x - 7}
-                            y={pos.y - 5}
-                            width={14}
-                            height={10}
-                            rx={2}
-                            fill={colors.primary}
-                            stroke={colors.stroke}
-                            strokeWidth="1"
-                            transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
-                        />
-                    );
-                }
-            });
+            // Portuguesa - Egg slices, ham, onions and black olive rings
+            return (
+                <g filter="url(#toppingShadow)">
+                    {/* Eggs & Ham */}
+                    {positions.slice(0, 15).map((pos, i) => {
+                        if (i % 3 === 0) {
+                            // Hardboiled Egg Slices
+                            return (
+                                <g key={i}>
+                                    {/* Egg white */}
+                                    <ellipse cx={pos.x} cy={pos.y} rx={14} ry={11} fill="#FFFFF0" stroke="#E3E3D3" strokeWidth="1" />
+                                    {/* Yolk */}
+                                    <ellipse cx={pos.x - 1} cy={pos.y} rx={7} ry={6} fill="#FFD700" stroke="#DAA520" strokeWidth="0.8" />
+                                    <ellipse cx={pos.x - 3} cy={pos.y - 2} rx={2} ry={1} fill="#FFF" opacity="0.6" />
+                                </g>
+                            );
+                        } else {
+                            // Ham bits
+                            return (
+                                <rect
+                                    key={i}
+                                    x={pos.x - 8}
+                                    y={pos.y - 6}
+                                    width={16}
+                                    height={12}
+                                    rx={1.5}
+                                    fill="#F29494"
+                                    stroke="#C47474"
+                                    strokeWidth="0.8"
+                                    transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
+                                />
+                            );
+                        }
+                    })}
+                    {/* Onion rings and olive rings (layered on top) */}
+                    {positions.slice(15, 26).map((pos, i) => {
+                        if (i % 2 === 0) {
+                            // Purple Onion Rings
+                            return (
+                                <circle
+                                    key={i}
+                                    cx={pos.x}
+                                    cy={pos.y}
+                                    r={12}
+                                    fill="none"
+                                    stroke="#DDA0DD"
+                                    strokeWidth="2.5"
+                                    opacity="0.85"
+                                    transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
+                                />
+                            );
+                        } else {
+                            // Black Olive Rings - Delicious and detailed
+                            return (
+                                <g key={i}>
+                                    {/* Olive body */}
+                                    <circle cx={pos.x} cy={pos.y} r={6.5} fill="#1E1E1E" stroke="#000000" strokeWidth="1" />
+                                    {/* Cut center hole showing cheese through it */}
+                                    <circle cx={pos.x} cy={pos.y} r={2.8} fill="#FFE294" />
+                                    {/* Shine */}
+                                    <circle cx={pos.x - 2} cy={pos.y - 2} r={1} fill="#FFFFFF" opacity="0.75" />
+                                </g>
+                            );
+                        }
+                    })}
+                </g>
+            );
 
         case 'shrimp':
-            // Camarão - curved shrimp shape
-            return positions.slice(0, 12).map((pos, i) => (
-                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
+            // Camarão - Detailed curved pink shrimp with segments
+            return positions.slice(0, 14).map((pos, i) => (
+                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`} filter="url(#toppingShadow)">
+                    {/* Outer shadow segment */}
                     <path
-                        d={`M ${pos.x - 10} ${pos.y + 2} 
-                Q ${pos.x - 5} ${pos.y - 8}, ${pos.x + 2} ${pos.y - 6}
-                Q ${pos.x + 10} ${pos.y - 4}, ${pos.x + 10} ${pos.y + 2}
-                Q ${pos.x + 5} ${pos.y + 6}, ${pos.x} ${pos.y + 5}
-                Q ${pos.x - 5} ${pos.y + 4}, ${pos.x - 10} ${pos.y + 2}`}
-                        fill={colors.primary}
-                        stroke={colors.stroke}
-                        strokeWidth="1.5"
+                        d={`M ${pos.x - 12} ${pos.y + 3} 
+                            Q ${pos.x - 6} ${pos.y - 9}, ${pos.x + 3} ${pos.y - 7}
+                            Q ${pos.x + 12} ${pos.y - 5}, ${pos.x + 12} ${pos.y + 2}
+                            Q ${pos.x + 6} ${pos.y + 7}, ${pos.x} ${pos.y + 6}
+                            Q ${pos.x - 6} ${pos.y + 5}, ${pos.x - 12} ${pos.y + 3}`}
+                        fill="#FFA07A"
+                        stroke="#D75F3F"
+                        strokeWidth="1.2"
                     />
-                    {/* Shrimp segments */}
-                    <path
-                        d={`M ${pos.x - 4} ${pos.y - 3} Q ${pos.x} ${pos.y - 5}, ${pos.x + 4} ${pos.y - 3}`}
-                        stroke="rgba(255,255,255,0.3)"
-                        strokeWidth="1.5"
-                        fill="none"
-                    />
+                    {/* Tail fin */}
+                    <path d={`M ${pos.x + 10} ${pos.y + 1} L ${pos.x + 15} ${pos.y + 4} L ${pos.x + 14} ${pos.y - 1} Z`} fill="#CD5C5C" />
+                    {/* Inner segments */}
+                    <path d={`M ${pos.x - 7} ${pos.y - 1} Q ${pos.x - 3} ${pos.y - 4}, ${pos.x + 1} ${pos.y - 2}`} fill="none" stroke="#FFF" strokeWidth="1.2" opacity="0.5" />
+                    <path d={`M ${pos.x - 2} ${pos.y + 1} Q ${pos.x + 2} ${pos.y - 2}, ${pos.x + 6} ${pos.y}`} fill="none" stroke="#FFF" strokeWidth="1.2" opacity="0.5" />
                 </g>
             ));
 
         case 'meat':
-            // Carne seca - dark brown fibrous strips
-            return positions.slice(0, 16).map((pos, i) => (
-                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
-                    <rect
-                        x={pos.x - pos.size * 2}
-                        y={pos.y - 4}
-                        width={pos.size * 4}
-                        height={8}
-                        rx={4}
-                        fill={colors.primary}
-                        stroke={colors.stroke}
-                        strokeWidth="1.5"
+            // Carne seca - Brown meat fibers + crispy edges
+            return positions.slice(0, 18).map((pos, i) => (
+                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`} filter="url(#toppingShadow)">
+                    <path
+                        d={`M ${pos.x - 15} ${pos.y - 2} C ${pos.x - 10} ${pos.y - 5}, ${pos.x + 10} ${pos.y - 4}, ${pos.x + 15} ${pos.y - 1} L ${pos.x + 13} ${pos.y + 3} C ${pos.x + 5} ${pos.y + 1}, ${pos.x - 5} ${pos.y + 2}, ${pos.x - 14} ${pos.y + 3} Z`}
+                        fill="#5D3A1A"
+                        stroke="#36200D"
+                        strokeWidth="1.2"
                     />
-                    {/* Fiber lines */}
-                    <line
-                        x1={pos.x - pos.size * 1.5}
-                        y1={pos.y}
-                        x2={pos.x + pos.size * 1.5}
-                        y2={pos.y}
-                        stroke={colors.secondary}
-                        strokeWidth="1"
-                        opacity="0.5"
-                    />
+                    {/* Meat fibers */}
+                    <line x1={pos.x - 12} y1={pos.y} x2={pos.x + 12} y2={pos.y} stroke="#8B5A2B" strokeWidth="1.2" opacity="0.6" />
+                    <line x1={pos.x - 9} y1={pos.y + 1.5} x2={pos.x + 9} y2={pos.y + 1.2} stroke="#8B5A2B" strokeWidth="0.8" opacity="0.5" />
                 </g>
             ));
 
         case 'bacon':
-            // Bacon - wavy strips with fat
+            // Bacon - Wavy crispy thick strips with fat sections
             return positions.slice(0, 14).map((pos, i) => (
-                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
-                    {/* Meat part */}
+                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`} filter="url(#toppingShadow)">
+                    {/* Bottom dark crispy shadow */}
                     <path
                         d={`M ${pos.x - 18} ${pos.y} Q ${pos.x - 9} ${pos.y - 6}, ${pos.x} ${pos.y} Q ${pos.x + 9} ${pos.y + 6}, ${pos.x + 18} ${pos.y}`}
-                        stroke={colors.primary}
-                        strokeWidth={6}
-                        fill="none"
-                        strokeLinecap="round"
-                    />
-                    {/* Fat stripe */}
-                    <path
-                        d={`M ${pos.x - 16} ${pos.y + 2} Q ${pos.x - 8} ${pos.y - 4}, ${pos.x} ${pos.y + 2} Q ${pos.x + 8} ${pos.y + 6}, ${pos.x + 14} ${pos.y + 1}`}
-                        stroke={colors.secondary}
-                        strokeWidth={3}
-                        fill="none"
-                        strokeLinecap="round"
-                    />
-                </g>
-            ));
-
-        case 'palmito':
-            // Palmito - white cylindrical pieces
-            return positions.slice(0, 14).map((pos, i) => (
-                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
-                    <rect
-                        x={pos.x - 4}
-                        y={pos.y - 14}
-                        width={8}
-                        height={28}
-                        rx={4}
-                        fill={colors.primary}
-                        stroke={colors.stroke}
-                        strokeWidth="1.5"
-                    />
-                    {/* Ring marks */}
-                    <line x1={pos.x - 3} y1={pos.y - 6} x2={pos.x + 3} y2={pos.y - 6} stroke={colors.stroke} strokeWidth="1" opacity="0.5" />
-                    <line x1={pos.x - 3} y1={pos.y + 6} x2={pos.x + 3} y2={pos.y + 6} stroke={colors.stroke} strokeWidth="1" opacity="0.5" />
-                </g>
-            ));
-
-        case 'chocolate':
-            // Chocolate - drizzle and chips
-            return (
-                <>
-                    {/* Drizzle */}
-                    {positions.slice(0, 8).map((pos, i) => (
-                        <path
-                            key={`drizzle-${i}`}
-                            d={`M ${pos.x - 22} ${pos.y} Q ${pos.x - 5} ${pos.y - 18}, ${pos.x + 12} ${pos.y} Q ${pos.x + 22} ${pos.y + 10}, ${pos.x + 28} ${pos.y}`}
-                            stroke={colors.primary}
-                            strokeWidth={6}
-                            fill="none"
-                            strokeLinecap="round"
-                            transform={`rotate(${pos.rotation * 0.5} ${pos.x} ${pos.y})`}
-                        />
-                    ))}
-                    {/* Granulado (sprinkles) */}
-                    {positions.slice(8, 22).map((pos, i) => (
-                        <rect
-                            key={`chip-${i}`}
-                            x={pos.x - 2}
-                            y={pos.y - 2}
-                            width={4}
-                            height={4}
-                            fill={colors.secondary}
-                            transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
-                        />
-                    ))}
-                </>
-            );
-
-        case 'dulce':
-            // Doce de leite - caramel swirls
-            return positions.slice(0, 12).map((pos, i) => (
-                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}>
-                    <path
-                        d={`M ${pos.x - 18} ${pos.y} Q ${pos.x - 6} ${pos.y - 12}, ${pos.x + 6} ${pos.y} Q ${pos.x + 18} ${pos.y + 12}, ${pos.x + 24} ${pos.y}`}
-                        stroke={colors.primary}
+                        stroke="#5A0505"
                         strokeWidth={7}
                         fill="none"
                         strokeLinecap="round"
                     />
-                    {/* Lighter center */}
+                    {/* Meat band */}
                     <path
-                        d={`M ${pos.x - 14} ${pos.y} Q ${pos.x - 4} ${pos.y - 8}, ${pos.x + 8} ${pos.y}`}
-                        stroke={colors.secondary}
-                        strokeWidth={3}
+                        d={`M ${pos.x - 18} ${pos.y} Q ${pos.x - 9} ${pos.y - 6}, ${pos.x} ${pos.y} Q ${pos.x + 9} ${pos.y + 6}, ${pos.x + 18} ${pos.y}`}
+                        stroke="#8B0000"
+                        strokeWidth={5}
                         fill="none"
                         strokeLinecap="round"
-                        opacity="0.6"
+                    />
+                    {/* Fat band inside */}
+                    <path
+                        d={`M ${pos.x - 14} ${pos.y + 1} Q ${pos.x - 7} ${pos.y - 4}, ${pos.x} ${pos.y + 1} Q ${pos.x + 7} ${pos.y + 5}, ${pos.x + 14} ${pos.y}`}
+                        stroke="#FFC0CB"
+                        strokeWidth={2}
+                        fill="none"
+                        strokeLinecap="round"
+                        opacity="0.8"
+                    />
+                    {/* Charred crisped edges */}
+                    <circle cx={pos.x - 17} cy={pos.y} r={1.5} fill="#2A0000" />
+                    <circle cx={pos.x + 17} cy={pos.y} r={1.5} fill="#2A0000" />
+                </g>
+            ));
+
+        case 'palmito':
+            // Palmito - Cream white cylindrical slices with rings
+            return positions.slice(0, 14).map((pos, i) => (
+                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`} filter="url(#toppingShadow)">
+                    {/* Main cylinder */}
+                    <rect
+                        x={pos.x - 5}
+                        y={pos.y - 12}
+                        width={10}
+                        height={24}
+                        rx={3}
+                        fill="#FFFFF0"
+                        stroke="#DCDCC0"
+                        strokeWidth="1.2"
+                    />
+                    {/* Rings texture */}
+                    <line x1={pos.x - 4} y1={pos.y - 5} x2={pos.x + 4} y2={pos.y - 5} stroke="#E5E5D0" strokeWidth="1" />
+                    <line x1={pos.x - 4} y1={pos.y + 5} x2={pos.x + 4} y2={pos.y + 5} stroke="#E5E5D0" strokeWidth="1" />
+                    {/* Shadow cores */}
+                    <ellipse cx={pos.x} cy={pos.y} rx={3} ry={1} fill="none" stroke="#D3D3A3" strokeWidth="0.8" opacity="0.6" />
+                </g>
+            ));
+
+        case 'chocolate':
+            // Chocolate - Fudge drizzles + sprinkles
+            return (
+                <g filter="url(#toppingShadow)">
+                    {/* Swirly dark chocolate fudge line */}
+                    {positions.slice(0, 10).map((pos, i) => (
+                        <path
+                            key={`fudge-${i}`}
+                            d={`M ${pos.x - 22} ${pos.y} Q ${pos.x - 5} ${pos.y - 16}, ${pos.x + 12} ${pos.y} Q ${pos.x + 22} ${pos.y + 10}, ${pos.x + 28} ${pos.y}`}
+                            stroke="#3B1C0B"
+                            strokeWidth={6}
+                            fill="none"
+                            strokeLinecap="round"
+                            transform={`rotate(${pos.rotation * 0.4} ${pos.x} ${pos.y})`}
+                        />
+                    ))}
+                    {/* Chocolate sprinkles */}
+                    {positions.slice(10, 26).map((pos, i) => (
+                        <rect
+                            key={`sprinkle-${i}`}
+                            x={pos.x - 1.5}
+                            y={pos.y - 4}
+                            width={3}
+                            height={8}
+                            rx={1}
+                            fill={i % 2 === 0 ? "#5C3D2E" : "#865D46"}
+                            transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
+                        />
+                    ))}
+                </g>
+            );
+
+        case 'dulce':
+            // Doce de leite - Caramel swirls
+            return positions.slice(0, 12).map((pos, i) => (
+                <g key={i} transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`} filter="url(#toppingShadow)">
+                    {/* Caramel ribbon */}
+                    <path
+                        d={`M ${pos.x - 20} ${pos.y} Q ${pos.x - 6} ${pos.y - 14}, ${pos.x + 6} ${pos.y} Q ${pos.x + 20} ${pos.y + 14}, ${pos.x + 26} ${pos.y}`}
+                        stroke="#C69C6D"
+                        strokeWidth={7.5}
+                        fill="none"
+                        strokeLinecap="round"
+                    />
+                    {/* Glaze reflection line */}
+                    <path
+                        d={`M ${pos.x - 16} ${pos.y - 1} Q ${pos.x - 4} ${pos.y - 10}, ${pos.x + 8} ${pos.y - 1}`}
+                        stroke="#FFE6C7"
+                        strokeWidth={2}
+                        fill="none"
+                        strokeLinecap="round"
+                        opacity="0.7"
                     />
                 </g>
             ));
 
         case 'guava':
-            // Goiabada - deep red-pink chunks
+            // Goiabada - Deep ruby red cubes with wet glaze shine
             return positions.slice(0, 14).map((pos, i) => (
-                <g key={i}>
+                <g key={i} filter="url(#toppingShadow)">
                     <rect
-                        x={pos.x - pos.size * 1.2}
-                        y={pos.y - pos.size * 0.8}
-                        width={pos.size * 2.4}
-                        height={pos.size * 1.6}
-                        rx={3}
-                        fill={colors.primary}
-                        stroke={colors.stroke}
-                        strokeWidth="1.5"
+                        x={pos.x - pos.size * 1.3}
+                        y={pos.y - pos.size * 0.9}
+                        width={pos.size * 2.6}
+                        height={pos.size * 1.8}
+                        rx={2}
+                        fill="#B01E2E"
+                        stroke="#7A0E18"
+                        strokeWidth="1.2"
                         transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
                     />
-                    {/* Shine */}
+                    {/* Wet shine highlight */}
                     <ellipse
-                        cx={pos.x - 2}
-                        cy={pos.y - 2}
-                        rx={3}
-                        ry={2}
-                        fill="rgba(255,255,255,0.25)"
+                        cx={pos.x - pos.size * 0.4}
+                        cy={pos.y - pos.size * 0.3}
+                        rx={2.5}
+                        ry={1.2}
+                        fill="#FFFFFF"
+                        opacity="0.45"
                         transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
                     />
                 </g>
             ));
 
         case 'coconut':
-            // Coco ralado - white flakes
-            return positions.slice(0, 24).map((pos, i) => (
-                <ellipse
+            // Coco ralado - White long coconut curls
+            return positions.slice(0, 32).map((pos, i) => (
+                <path
                     key={i}
-                    cx={pos.x}
-                    cy={pos.y}
-                    rx={7}
-                    ry={2.5}
-                    fill={colors.primary}
-                    stroke={colors.stroke}
-                    strokeWidth="0.5"
+                    d={`M ${pos.x - 8} ${pos.y} Q ${pos.x} ${pos.y - 3}, ${pos.x + 8} ${pos.y + 1}`}
+                    fill="none"
+                    stroke="#FFFFFF"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
                     transform={`rotate(${pos.rotation} ${pos.x} ${pos.y})`}
+                    filter="url(#toppingShadow)"
+                    opacity="0.95"
                 />
             ));
 
@@ -578,8 +680,12 @@ export function PizzaVisual({
     const outerRadius = (size / 2) - 8;
     const crustWidth = 14;
     const innerRadius = outerRadius - crustWidth;
-    const sauceRadius = innerRadius - 3;
-    const cheeseRadius = sauceRadius - 4;
+    const sauceRadius = innerRadius - 2;
+    const cheeseRadius = sauceRadius - 3;
+
+    // Generate static effects on mount
+    const charMarks = generateCharMarks(center, outerRadius, 9);
+    const oregano = generateOreganoFlakes(center, cheeseRadius, 140);
 
     return (
         <div className="relative inline-block">
@@ -587,10 +693,54 @@ export function PizzaVisual({
                 width={size}
                 height={size}
                 viewBox={`0 0 ${size} ${size}`}
-                className="drop-shadow-xl"
+                className="drop-shadow-xl select-none"
             >
-                {/* Clip paths */}
+                {/* SVG Definitions for shadows, textures and color gradients */}
                 <defs>
+                    {/* Drop shadow for realistic topping elevation */}
+                    <filter id="toppingShadow" x="-30%" y="-30%" width="160%" height="160%">
+                        <feDropShadow dx="0.8" dy="1.8" stdDeviation="1.1" flood-color="#1F0800" flood-opacity="0.55" />
+                    </filter>
+                    
+                    {/* Glow filter for active selection */}
+                    <filter id="activeGlow" x="-10%" y="-10%" width="120%" height="120%">
+                        <feGaussianBlur stdDeviation="5" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+
+                    {/* Crust Gradient - from raw center to oven browned crust outer edge */}
+                    <radialGradient id="crustGrad" cx="50%" cy="50%" r="50%" fx="42%" fy="42%">
+                        <stop offset="0%" stopColor="#FAE6C7" />      {/* Dough inner center */}
+                        <stop offset="68%" stopColor="#EBC085" />     {/* Golden inner crust */}
+                        <stop offset="85%" stopColor="#C97E3A" />     {/* Brown ovened crust */}
+                        <stop offset="98%" stopColor="#A85718" />     {/* Dark toasted ring */}
+                        <stop offset="100%" stopColor="#5E2C04" />    {/* Crispy outer rim */}
+                    </radialGradient>
+
+                    {/* Cheese Base Gradient - simulated melted and golden toasted cheese */}
+                    <radialGradient id="cheeseGrad" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stopColor="#FFF4D0" />      {/* Creamy white center */}
+                        <stop offset="60%" stopColor="#FFDE82" />     {/* Rich mozzarella yellow */}
+                        <stop offset="88%" stopColor="#F5B93D" />     {/* Toasted orange cheddar bits */}
+                        <stop offset="100%" stopColor="#D58010" />    {/* Golden crust interface */}
+                    </radialGradient>
+
+                    {/* Pepperoni/Calabresa Gradient */}
+                    <radialGradient id="calabresaGrad" cx="30%" cy="30%" r="70%">
+                        <stop offset="0%" stopColor="#E35D4B" />      {/* Juicy center */}
+                        <stop offset="70%" stopColor="#A8281E" />     {/* Rich sausage red */}
+                        <stop offset="98%" stopColor="#700E0E" />     {/* Toasted border */}
+                        <stop offset="100%" stopColor="#400303" />    {/* Charred rim */}
+                    </radialGradient>
+
+                    {/* Basil Tomato Slice Gradient */}
+                    <radialGradient id="tomatoGrad" cx="35%" cy="35%" r="65%">
+                        <stop offset="0%" stopColor="#FF5252" />
+                        <stop offset="85%" stopColor="#D50000" />
+                        <stop offset="100%" stopColor="#7F0000" />
+                    </radialGradient>
+
+                    {/* Half/Third Clips */}
                     <clipPath id="leftHalfClip">
                         <rect x="0" y="0" width={center} height={size} />
                     </clipPath>
@@ -599,15 +749,12 @@ export function PizzaVisual({
                     </clipPath>
 
                     {/* 3 Flavors Clip Paths */}
-                    {/* Slice 1: 0 to 120 degrees (Right-ish) */}
                     <clipPath id="slice1Clip">
                         <path d={`M ${center} ${center} L ${center} 0 A ${center} ${center} 0 0 1 ${center + Math.sin(120 * Math.PI / 180) * center} ${center - Math.cos(120 * Math.PI / 180) * center} Z`} />
                     </clipPath>
-                    {/* Slice 2: 120 to 240 degrees (Bottom) */}
                     <clipPath id="slice2Clip">
                         <path d={`M ${center} ${center} L ${center + Math.sin(120 * Math.PI / 180) * center} ${center - Math.cos(120 * Math.PI / 180) * center} A ${center} ${center} 0 0 1 ${center + Math.sin(240 * Math.PI / 180) * center} ${center - Math.cos(240 * Math.PI / 180) * center} Z`} />
                     </clipPath>
-                    {/* Slice 3: 240 to 360 degrees (Top-Left) */}
                     <clipPath id="slice3Clip">
                         <path d={`M ${center} ${center} L ${center + Math.sin(240 * Math.PI / 180) * center} ${center - Math.cos(240 * Math.PI / 180) * center} A ${center} ${center} 0 0 1 ${center} 0 Z`} />
                     </clipPath>
@@ -617,51 +764,66 @@ export function PizzaVisual({
                     </clipPath>
                 </defs>
 
-                {/* Outer crust - golden brown */}
+                {/* 1. Main outer baked crust */}
                 <circle
                     cx={center}
                     cy={center}
                     r={outerRadius}
-                    fill="#C68642"
-                    stroke="#8B5A2B"
-                    strokeWidth="2"
+                    fill="url(#crustGrad)"
                 />
 
-                {/* Inner crust - lighter */}
-                <circle
-                    cx={center}
-                    cy={center}
-                    r={outerRadius - 5}
-                    fill="#DEB887"
-                />
+                {/* 2. Wood-fire dark char marks on the crust rim (adds incredible realism) */}
+                {charMarks.map((mark, i) => (
+                    <ellipse
+                        key={i}
+                        cx={mark.x}
+                        cy={mark.y}
+                        rx={mark.rx}
+                        ry={mark.ry}
+                        fill="#2E1605"
+                        opacity="0.75"
+                        transform={`rotate(${mark.rot} ${mark.x} ${mark.y})`}
+                        filter="blur(0.5px)"
+                    />
+                ))}
 
-                {/* Red tomato sauce ring */}
+                {/* 3. Deep red tomato sauce base */}
                 <circle
                     cx={center}
                     cy={center}
                     r={innerRadius}
-                    fill="#B22222"
+                    fill="#991515"
+                />
+                
+                {/* Sauce outer ring texture */}
+                <circle
+                    cx={center}
+                    cy={center}
+                    r={innerRadius - 1.5}
+                    fill="none"
+                    stroke="#B81D1D"
+                    strokeWidth="2.5"
+                    opacity="0.8"
                 />
 
-                {/* Melted cheese base */}
+                {/* 4. Rich melted cheese blanket */}
                 <circle
                     cx={center}
                     cy={center}
                     r={cheeseRadius}
-                    fill="#F5DEB3"
+                    fill="url(#cheeseGrad)"
                 />
 
-                {/* Cheese bubbles/texture */}
-                <circle cx={center - 40} cy={center - 30} r={20} fill="#FAEBD7" opacity="0.6" />
-                <circle cx={center + 50} cy={center + 40} r={25} fill="#FAEBD7" opacity="0.5" />
-                <circle cx={center - 20} cy={center + 50} r={18} fill="#FAEBD7" opacity="0.45" />
-                <circle cx={center + 30} cy={center - 45} r={15} fill="#FAEBD7" opacity="0.55" />
-                <circle cx={center} cy={center} r={12} fill="#FAEBD7" opacity="0.4" />
+                {/* Gratin cheese bubbles (toasty spots on cheese) */}
+                <circle cx={center - 32} cy={center - 28} r={14} fill="#E29025" opacity="0.25" filter="blur(1.5px)" />
+                <circle cx={center + 45} cy={center + 35} r={18} fill="#E29025" opacity="0.3" filter="blur(2px)" />
+                <circle cx={center - 15} cy={center + 45} r={12} fill="#E29025" opacity="0.2" filter="blur(1.5px)" />
+                <circle cx={center + 25} cy={center - 38} r={10} fill="#E29025" opacity="0.25" filter="blur(1.2px)" />
 
-                {/* Toppings for inteira mode */}
+                {/* 5. Toppings for inteira mode */}
                 {mode === 'inteira' && leftFlavor && (
                     <g clipPath="url(#pizzaClip)">
-                        {renderToppings(leftFlavor.pattern, leftFlavor.colors, center, cheeseRadius)}
+                        {renderToppings(leftFlavor.pattern, center, cheeseRadius)}
                     </g>
                 )}
 
@@ -671,7 +833,7 @@ export function PizzaVisual({
                         {leftFlavor && (
                             <g clipPath="url(#leftHalfClip)">
                                 <g clipPath="url(#pizzaClip)">
-                                    {renderToppings(leftFlavor.pattern, leftFlavor.colors, center, cheeseRadius, 'left')}
+                                    {renderToppings(leftFlavor.pattern, center, cheeseRadius, 'left')}
                                 </g>
                             </g>
                         )}
@@ -679,20 +841,22 @@ export function PizzaVisual({
                         {rightFlavor && (
                             <g clipPath="url(#rightHalfClip)">
                                 <g clipPath="url(#pizzaClip)">
-                                    {renderToppings(rightFlavor.pattern, rightFlavor.colors, center, cheeseRadius, 'right')}
+                                    {renderToppings(rightFlavor.pattern, center, cheeseRadius, 'right')}
                                 </g>
                             </g>
                         )}
 
-                        {/* Dividing line */}
+                        {/* Traditional thick divider line (dark baked crust line separating halves) */}
                         <line
                             x1={center}
-                            y1={center - innerRadius + 5}
+                            y1={center - innerRadius + 4}
                             x2={center}
-                            y2={center + innerRadius - 5}
-                            stroke="#8B0000"
-                            strokeWidth="4"
+                            y2={center + innerRadius - 4}
+                            stroke="#542B0D"
+                            strokeWidth="3.5"
                             strokeLinecap="round"
+                            opacity="0.85"
+                            filter="url(#toppingShadow)"
                         />
                     </>
                 )}
@@ -703,30 +867,30 @@ export function PizzaVisual({
                         {leftFlavor && (
                             <g clipPath="url(#slice1Clip)">
                                 <g clipPath="url(#pizzaClip)">
-                                    {renderToppings(leftFlavor.pattern, leftFlavor.colors, center, cheeseRadius, 'slice1')}
+                                    {renderToppings(leftFlavor.pattern, center, cheeseRadius, 'slice1')}
                                 </g>
                             </g>
                         )}
                         {rightFlavor && (
                             <g clipPath="url(#slice2Clip)">
                                 <g clipPath="url(#pizzaClip)">
-                                    {renderToppings(rightFlavor.pattern, rightFlavor.colors, center, cheeseRadius, 'slice2')}
+                                    {renderToppings(rightFlavor.pattern, center, cheeseRadius, 'slice2')}
                                 </g>
                             </g>
                         )}
                         {thirdFlavor && (
                             <g clipPath="url(#slice3Clip)">
                                 <g clipPath="url(#pizzaClip)">
-                                    {renderToppings(thirdFlavor.pattern, thirdFlavor.colors, center, cheeseRadius, 'slice3')}
+                                    {renderToppings(thirdFlavor.pattern, center, cheeseRadius, 'slice3')}
                                 </g>
                             </g>
                         )}
 
                         {/* Dividing lines for 3 Flavors */}
                         {[0, 120, 240].map(angle => {
-                            const rad = (angle - 90) * Math.PI / 180; // -90 to start from top
-                            const x2 = center + (innerRadius - 5) * Math.cos(rad);
-                            const y2 = center + (innerRadius - 5) * Math.sin(rad);
+                            const rad = (angle - 90) * Math.PI / 180;
+                            const x2 = center + (innerRadius - 4) * Math.cos(rad);
+                            const y2 = center + (innerRadius - 4) * Math.sin(rad);
                             return (
                                 <line
                                     key={angle}
@@ -734,16 +898,34 @@ export function PizzaVisual({
                                     y1={center}
                                     x2={x2}
                                     y2={y2}
-                                    stroke="#8B0000"
+                                    stroke="#542B0D"
                                     strokeWidth="3"
                                     strokeLinecap="round"
+                                    opacity="0.8"
+                                    filter="url(#toppingShadow)"
                                 />
                             );
                         })}
                     </>
                 )}
 
-                {/* Active slice highlight */}
+                {/* 6. Scatter dry oregano flakes and pepper on top of everything */}
+                <g opacity="0.85">
+                    {oregano.map((flake, i) => (
+                        <rect
+                            key={i}
+                            x={flake.x}
+                            y={flake.y}
+                            width={flake.r * 1.5}
+                            height={flake.r * 0.8}
+                            rx={0.3}
+                            fill={flake.color}
+                            transform={`rotate(${flake.rot} ${flake.x} ${flake.y})`}
+                        />
+                    ))}
+                </g>
+
+                {/* Active slice highlight glow */}
                 {activeHalf && (
                     <g clipPath={
                         activeHalf === 'left' ? 'url(#leftHalfClip)' :
@@ -757,22 +939,24 @@ export function PizzaVisual({
                             cy={center}
                             r={innerRadius}
                             fill="none"
-                            stroke="#F2C94C"
-                            strokeWidth="6"
+                            stroke="#FFD700"
+                            strokeWidth="5"
                             className="animate-pulse"
+                            filter="url(#activeGlow)"
+                            opacity="0.8"
                         />
                         <circle
                             cx={center}
                             cy={center}
                             r={cheeseRadius}
-                            fill="#F2C94C"
-                            opacity="0.2"
+                            fill="#FFD700"
+                            opacity="0.12"
                             className="animate-pulse"
                         />
                     </g>
                 )}
 
-                {/* Subtle slice lines */}
+                {/* Subtle guiding slice score lines */}
                 {[45, 90, 135].map((angle) => (
                     <g key={angle}>
                         <line
@@ -781,8 +965,8 @@ export function PizzaVisual({
                             x2={center + cheeseRadius * Math.cos((angle * Math.PI) / 180)}
                             y2={center + cheeseRadius * Math.sin((angle * Math.PI) / 180)}
                             stroke="#D4A76A"
-                            strokeWidth="1.5"
-                            opacity="0.25"
+                            strokeWidth="1.2"
+                            opacity="0.18"
                         />
                         <line
                             x1={center}
@@ -790,17 +974,17 @@ export function PizzaVisual({
                             x2={center - cheeseRadius * Math.cos((angle * Math.PI) / 180)}
                             y2={center - cheeseRadius * Math.sin((angle * Math.PI) / 180)}
                             stroke="#D4A76A"
-                            strokeWidth="1.5"
-                            opacity="0.25"
+                            strokeWidth="1.2"
+                            opacity="0.18"
                         />
                     </g>
                 ))}
             </svg>
 
-            {/* Shadow */}
+            {/* Premium blur shadow underneath the pizza */}
             <div
-                className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-black/30 rounded-full blur-lg"
-                style={{ width: size * 0.75, height: 14 }}
+                className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-black/45 rounded-full blur-md"
+                style={{ width: size * 0.85, height: 16 }}
             />
         </div>
     );
