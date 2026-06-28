@@ -95,6 +95,7 @@
     overflow-x: hidden;
     min-height: 100dvh;
     overscroll-behavior: none;
+    touch-action: manipulation;
   }
 
   /* Textured Background */
