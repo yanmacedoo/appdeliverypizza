@@ -36,6 +36,9 @@ export async function createOrder(data: OrderFormData): Promise<string> {
         total: data.total,
         status: 'pending' as OrderStatus,
         createdAt: serverTimestamp(),
+        discount: data.discount || 0,
+        couponCode: data.couponCode || null,
+        isPaid: data.isPaid || false
     };
 
     const docRef = await addDoc(collection(db, ORDERS_COLLECTION), orderData);

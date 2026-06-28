@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Smartphone, Share, Plus, AlertCircle } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { X, Smartphone, Share } from 'lucide-react';
 
 export function InstallPrompt() {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);

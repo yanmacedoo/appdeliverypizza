@@ -33,6 +33,9 @@ export interface OrderFormData {
     subtotal: number;
     deliveryFee: number;
     total: number;
+    discount?: number;
+    couponCode?: string | null;
+    isPaid?: boolean;
 }
 
 // Status display configuration
