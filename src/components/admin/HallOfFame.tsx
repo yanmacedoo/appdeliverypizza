@@ -17,12 +17,14 @@ interface CustomerRanking {
     orderCount: number;
 }
 
-type Period = 'weekly' | 'monthly';
+type Period = 'weekly' | 'monthly' | 'custom';
 
 export function HallOfFame() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [period, setPeriod] = useState<Period>('weekly');
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
 
     // Fetch completed orders
     useEffect(() => {
@@ -52,20 +54,36 @@ export function HallOfFame() {
     // Filter orders by period
     const filteredOrders = useMemo(() => {
         const now = new Date();
-        const cutoffDate = new Date();
+        let cutoffDate = new Date();
+        let endCutoffDate = new Date();
 
         if (period === 'weekly') {
             cutoffDate.setDate(now.getDate() - 7);
-        } else {
+        } else if (period === 'monthly') {
             cutoffDate.setMonth(now.getMonth() - 1);
+        } else if (period === 'custom') {
+            if (startDate) {
+                cutoffDate = new Date(startDate + 'T00:00:00');
+            } else {
+                cutoffDate = new Date(0);
+            }
+            if (endDate) {
+                endCutoffDate = new Date(endDate + 'T23:59:59');
+            } else {
+                endCutoffDate = new Date();
+            }
         }
 
         return orders.filter(order => {
             if (!order.createdAt) return false;
             const orderDate = order.createdAt.toDate ? order.createdAt.toDate() : new Date();
+            
+            if (period === 'custom') {
+                return orderDate >= cutoffDate && orderDate <= endCutoffDate;
+            }
             return orderDate >= cutoffDate;
         });
-    }, [orders, period]);
+    }, [orders, period, startDate, endDate]);
 
     // Process flavor rankings
     const topFlavors = useMemo<FlavorRanking[]>(() => {
@@ -163,32 +181,79 @@ export function HallOfFame() {
     return (
         <div className="space-y-4">
             {/* Period Filter */}
-            <div className="flex items-center justify-center gap-2">
-                <Calendar className="w-4 h-4 text-text-muted" />
-                <div className="flex rounded-lg overflow-hidden border border-white/10">
-                    <button
-                        onClick={() => setPeriod('weekly')}
-                        className={cn(
-                            "px-4 py-2 text-sm font-medium transition-all",
-                            period === 'weekly'
-                                ? "bg-primary text-background"
-                                : "bg-surface text-text-muted hover:bg-surface-light"
-                        )}
-                    >
-                        Semanal
-                    </button>
-                    <button
-                        onClick={() => setPeriod('monthly')}
-                        className={cn(
-                            "px-4 py-2 text-sm font-medium transition-all",
-                            period === 'monthly'
-                                ? "bg-primary text-background"
-                                : "bg-surface text-text-muted hover:bg-surface-light"
-                        )}
-                    >
-                        Mensal
-                    </button>
+            <div className="flex flex-col items-center gap-3">
+                <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-text-muted" />
+                    <div className="flex rounded-lg overflow-hidden border border-white/10">
+                        <button
+                            onClick={() => setPeriod('weekly')}
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium transition-all",
+                                period === 'weekly'
+                                    ? "bg-primary text-background"
+                                    : "bg-surface text-text-muted hover:bg-surface-light"
+                            )}
+                        >
+                            Semanal
+                        </button>
+                        <button
+                            onClick={() => setPeriod('monthly')}
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium transition-all",
+                                period === 'monthly'
+                                    ? "bg-primary text-background"
+                                    : "bg-surface text-text-muted hover:bg-surface-light"
+                            )}
+                        >
+                            Mensal
+                        </button>
+                        <button
+                            onClick={() => {
+                                setPeriod('custom');
+                                if (!startDate) {
+                                    const d = new Date();
+                                    d.setDate(d.getDate() - 7);
+                                    setStartDate(d.toISOString().split('T')[0]);
+                                }
+                                if (!endDate) {
+                                    setEndDate(new Date().toISOString().split('T')[0]);
+                                }
+                            }}
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium transition-all",
+                                period === 'custom'
+                                    ? "bg-primary text-background"
+                                    : "bg-surface text-text-muted hover:bg-surface-light"
+                            )}
+                        >
+                            Escolher Período
+                        </button>
+                    </div>
                 </div>
+
+                {/* Custom Date Inputs */}
+                {period === 'custom' && (
+                    <div className="flex items-center gap-2 bg-surface/50 p-2 rounded-lg border border-white/10">
+                        <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                            <span>De:</span>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="bg-background border border-white/10 rounded-md p-1.5 text-xs text-text focus:outline-none focus:border-primary/50"
+                            />
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                            <span>Até:</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="bg-background border border-white/10 rounded-md p-1.5 text-xs text-text focus:outline-none focus:border-primary/50"
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
