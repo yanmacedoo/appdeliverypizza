@@ -7,8 +7,8 @@ export function AdminLogin() {
     const navigate = useNavigate();
     const { login } = useAuth();
 
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+    const [email, setEmail] = useState('admin');
+    const [password, setPassword] = useState('admin');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -62,16 +62,16 @@ export function AdminLogin() {
                     {/* Email Field */}
                     <div>
                         <label className="block text-sm font-medium text-text-muted mb-2">
-                            Email
+                            Usuário / Email
                         </label>
                         <div className="relative">
                             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
                             <input
-                                type="email"
+                                type="text"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
-                                placeholder="admin@fomedepizza.com"
+                                placeholder="admin"
                                 className="w-full bg-background border border-white/10 rounded-xl pl-11 pr-4 py-3 text-text placeholder:text-text-muted/50 input-glow transition-all"
                             />
                         </div>

@@ -7,6 +7,8 @@ import { DrinkModal } from './components/DrinkModal';
 import { CartSidebar } from './components/CartSidebar';
 import { CookieConsent } from './components/CookieConsent';
 import { CheckoutModal } from './components/CheckoutModal';
+import { InstallPrompt } from './components/InstallPrompt';
+import { PaymentSuccessModal } from './components/PaymentSuccessModal';
 
 
 import { type Product } from './data/menu';
@@ -25,6 +27,10 @@ function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState(menu[0]?.id || '');
   const [isStoreOpen, setIsStoreOpen] = useState(true);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return searchParams.has('session_id') && searchParams.has('order_id');
+  });
 
   // Handle product selection - route to appropriate modal
   const handleProductSelect = useCallback((product: Product) => {
@@ -253,6 +259,13 @@ function App() {
         onClose={handleCloseCheckout}
       />
 
+      {isSuccessModalOpen && (
+        <PaymentSuccessModal
+          onClose={() => setIsSuccessModalOpen(false)}
+        />
+      )}
+
+      <InstallPrompt />
       <CookieConsent />
     </div>
   );

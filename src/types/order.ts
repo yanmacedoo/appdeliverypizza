@@ -23,6 +23,8 @@ export interface Order {
     completedAt?: Timestamp | null;
     note?: string; // Internal note for the order
     isPaid?: boolean; // Payment status override
+    discount?: number;
+    couponCode?: string | null;
 }
 
 export interface OrderFormData {

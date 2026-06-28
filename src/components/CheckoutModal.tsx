@@ -12,7 +12,8 @@ interface CheckoutModalProps {
 const paymentMethods = [
     { id: 'pix', label: 'Pix', icon: QrCode },
     { id: 'dinheiro', label: 'Dinheiro', icon: Banknote },
-    { id: 'cartao', label: 'Cartão', icon: CreditCard },
+    { id: 'cartao', label: 'Cartão (Maquininha)', icon: CreditCard },
+    { id: 'stripe', label: 'Cartão Online', icon: CreditCard },
     { id: 'cartao_dinheiro', label: 'Cartão e Dinheiro', icon: Wallet },
 ];
 
@@ -26,7 +27,7 @@ export const CheckoutModal = memo(function CheckoutModal({ isOpen, onClose }: Ch
     const [reference, setReference] = useState('');
     const [payment, setPayment] = useState('pix');
     const [isPickup, setIsPickup] = useState(false);
-    const [saving] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [changeFor, setChangeFor] = useState('');
     const [pixCopied, setPixCopied] = useState(false);
@@ -57,7 +58,7 @@ export const CheckoutModal = memo(function CheckoutModal({ isOpen, onClose }: Ch
         { name: 'Vila de Santo André', fee: 6 },
     ];
 
-    const { items, clearCart } = useCartStore();
+    const { items, clearCart, appliedCoupon, getDiscountAmount, getTotal } = useCartStore();
 
     const getSubtotal = () => {
         return items.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -86,7 +87,68 @@ export const CheckoutModal = memo(function CheckoutModal({ isOpen, onClose }: Ch
         const orderItems = [...items];
         const orderSubtotal = getSubtotal();
         const orderDeliveryFee = getDeliveryFee();
-        const orderTotal = orderSubtotal + orderDeliveryFee;
+        const orderDiscount = getDiscountAmount();
+        const orderTotal = Math.max(0, orderSubtotal - orderDiscount) + orderDeliveryFee;
+
+        if (payment === 'stripe') {
+            setError('');
+            const functionUrl = 'https://criarsessaostripe-32qjwk2hla-uc.a.run.app';
+
+            const fullAddress = isPickup
+                ? 'RETIRADA NO LOCAL'
+                : `${sanitizeInput(street.trim())}, ${sanitizeInput(number.trim())}, ${neighborhood}. Ref: ${sanitizeInput(reference.trim())}`;
+
+            try {
+                setSaving(true);
+                // 1. Criar pedido com status pendente e isPaid = false
+                const pedidoId = await createOrder({
+                    customer: {
+                        name: sanitizeInput(name.trim()),
+                        phone: sanitizeInput(phone.trim()),
+                        address: fullAddress,
+                        paymentMethod: 'Cartão de Crédito Online (Stripe)',
+                        changeFor: '',
+                    },
+                    items: orderItems,
+                    subtotal: orderSubtotal,
+                    deliveryFee: orderDeliveryFee,
+                    discount: orderDiscount,
+                    couponCode: appliedCoupon ? appliedCoupon.code : null,
+                    total: orderTotal,
+                });
+
+                // 2. Chamar Cloud Function para gerar link da Stripe
+                const response = await fetch(functionUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pedidoId,
+                        items: orderItems,
+                        deliveryFee: orderDeliveryFee,
+                        discount: orderDiscount,
+                        total: orderTotal
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Falha ao iniciar pagamento do Stripe');
+                }
+
+                const data = await response.json();
+                
+                // Limpa carrinho e redireciona para a Stripe
+                clearCart();
+                onClose();
+                window.location.href = data.url;
+                return;
+            } catch (err: any) {
+                console.error('Erro ao redirecionar para a Stripe:', err);
+                setError(err.message || 'Erro ao iniciar pagamento. Tente novamente ou use outra forma de pagamento.');
+                setSaving(false);
+                return;
+            }
+        }
 
         // Build WhatsApp message
         let msg = `*Olá, Fome de Pizza! Gostaria de fazer um pedido:*\n\n`;
@@ -99,6 +161,9 @@ export const CheckoutModal = memo(function CheckoutModal({ isOpen, onClose }: Ch
 
         msg += `----------------------------\n`;
         msg += `Subtotal: R$ ${orderSubtotal.toFixed(2).replace('.', ',')}\n`;
+        if (orderDiscount > 0) {
+            msg += `Desconto (${appliedCoupon?.code}): - R$ ${orderDiscount.toFixed(2).replace('.', ',')}\n`;
+        }
         if (isPickup) {
             msg += `*🏪 RETIRADA NO LOCAL*\n`;
         } else {
@@ -121,7 +186,7 @@ export const CheckoutModal = memo(function CheckoutModal({ isOpen, onClose }: Ch
         }
 
         const encodedMsg = encodeURIComponent(msg);
-        const whatsappUrl = `https://wa.me/5573982563570?text=${encodedMsg}`;
+        const whatsappUrl = `https://api.whatsapp.com/send?phone=5573982563570&text=${encodedMsg}`;
 
         // Save to Firebase in background (non-blocking)
         const fullAddress = isPickup
@@ -139,6 +204,8 @@ export const CheckoutModal = memo(function CheckoutModal({ isOpen, onClose }: Ch
             items: orderItems,
             subtotal: orderSubtotal,
             deliveryFee: orderDeliveryFee,
+            discount: orderDiscount,
+            couponCode: appliedCoupon ? appliedCoupon.code : null,
             total: orderTotal,
         }).then((id) => console.log('✅ Firebase OK:', id)).catch((err) => console.error('❌ Firebase:', err));
 
@@ -364,7 +431,7 @@ export const CheckoutModal = memo(function CheckoutModal({ isOpen, onClose }: Ch
                         <div className="p-4 bg-background border border-white/10 rounded-xl flex items-center justify-between">
                             <span className="text-text-muted text-sm">Valor Total a Pagar:</span>
                             <span className="text-xl font-bold text-primary text-glow">
-                                R$ {(getSubtotal() + getDeliveryFee()).toFixed(2).replace('.', ',')}
+                                R$ {getTotal().toFixed(2).replace('.', ',')}
                             </span>
                         </div>
                     )}
@@ -418,12 +485,21 @@ export const CheckoutModal = memo(function CheckoutModal({ isOpen, onClose }: Ch
                         {saving ? (
                             <>
                                 <Loader2 className="w-5 h-5 animate-spin" />
-                                Registrando pedido...
+                                {payment === 'stripe' ? 'Redirecionando para o Stripe...' : 'Registrando pedido...'}
                             </>
                         ) : (
                             <>
-                                <Send className="w-5 h-5" />
-                                Enviar pelo WhatsApp
+                                {payment === 'stripe' ? (
+                                    <>
+                                        <CreditCard className="w-5 h-5" />
+                                        Pagar Online (Stripe)
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="w-5 h-5" />
+                                        Enviar pelo WhatsApp
+                                    </>
+                                )}
                             </>
                         )}
                     </button>

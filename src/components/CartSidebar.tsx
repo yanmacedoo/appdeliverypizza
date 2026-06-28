@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Trash2, ShoppingBag, Truck, MessageSquarePlus, Check } from 'lucide-react';
+import { X, Trash2, ShoppingBag, Truck, MessageSquarePlus, Check, Ticket } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
 import { cn, sanitizeInput } from '../lib/utils';
 
@@ -16,9 +16,54 @@ export function CartSidebar({ isOpen, onClose, onCheckout }: CartSidebarProps) {
     const subtotal = useCartStore((state) => state.getSubtotal());
     const deliveryFee = useCartStore((state) => state.getDeliveryFee());
     const total = useCartStore((state) => state.getTotal());
+    const appliedCoupon = useCartStore((state) => state.appliedCoupon);
+    const applyCoupon = useCartStore((state) => state.applyCoupon);
+    const discountAmount = useCartStore((state) => state.getDiscountAmount());
 
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
     const [editingNote, setEditingNote] = useState('');
+
+    const [couponCodeInput, setCouponCodeInput] = useState('');
+    const [couponError, setCouponError] = useState('');
+    const [applying, setApplying] = useState(false);
+
+    const handleApplyCoupon = async () => {
+        if (!couponCodeInput.trim()) return;
+        setApplying(true);
+        setCouponError('');
+        try {
+            const { checkCoupon } = await import('../services/couponService');
+            const coupon = await checkCoupon(couponCodeInput);
+            if (!coupon) {
+                setCouponError('Cupom inválido ou inativo');
+                return;
+            }
+
+            if (subtotal < (coupon.minOrderValue || 0)) {
+                setCouponError(`Valor mínimo do pedido para este cupom é R$ ${coupon.minOrderValue?.toFixed(2).replace('.', ',')}`);
+                return;
+            }
+
+            applyCoupon({
+                code: coupon.code,
+                type: coupon.type,
+                value: coupon.value,
+                minOrderValue: coupon.minOrderValue || 0
+            });
+            setCouponCodeInput('');
+        } catch (error) {
+            console.error('Erro ao aplicar cupom:', error);
+            setCouponError('Erro ao aplicar cupom');
+        } finally {
+            setApplying(false);
+        }
+    };
+
+    const handleRemoveCoupon = () => {
+        applyCoupon(null);
+        setCouponCodeInput('');
+        setCouponError('');
+    };
 
     const isFreeDelivery = deliveryFee === 0;
     const amountToFreeDelivery = 100 - subtotal;
@@ -171,11 +216,63 @@ export function CartSidebar({ isOpen, onClose, onCheckout }: CartSidebarProps) {
                             </div>
                         )}
 
+                        {/* Campo de Cupom */}
+                        <div className="border-b border-white/5 pb-3">
+                            {appliedCoupon ? (
+                                <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl text-sm animate-in zoom-in-95 duration-200">
+                                    <span className="text-emerald-400 font-semibold font-mono flex items-center gap-1.5 uppercase">
+                                        <Ticket className="w-3.5 h-3.5" />
+                                        {appliedCoupon.code}
+                                    </span>
+                                    <button
+                                        onClick={handleRemoveCoupon}
+                                        className="text-xs text-red-400 hover:text-red-300 font-semibold transition-colors"
+                                    >
+                                        Remover
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Cupom de desconto"
+                                            value={couponCodeInput}
+                                            onChange={e => {
+                                                setCouponCodeInput(e.target.value.toUpperCase());
+                                                setCouponError('');
+                                            }}
+                                            className="flex-1 bg-surface-light border border-white/10 rounded-xl px-3 py-2 text-text text-sm uppercase focus:outline-none focus:border-primary/50"
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') handleApplyCoupon();
+                                            }}
+                                        />
+                                        <button
+                                            onClick={handleApplyCoupon}
+                                            disabled={applying || !couponCodeInput.trim()}
+                                            className="px-4 py-2 bg-primary text-background font-bold rounded-xl text-sm hover:bg-primary-hover transition-colors disabled:opacity-50 animate-in fade-in"
+                                        >
+                                            {applying ? '...' : 'Aplicar'}
+                                        </button>
+                                    </div>
+                                    {couponError && (
+                                        <p className="text-xs text-red-400 pl-1">{couponError}</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                         <div className="space-y-2">
                             <div className="flex justify-between text-sm text-text-muted">
                                 <span>Subtotal</span>
                                 <span>R$ {subtotal.toFixed(2).replace('.', ',')}</span>
                             </div>
+                            {discountAmount > 0 && (
+                                <div className="flex justify-between text-sm text-emerald-400 font-medium">
+                                    <span>Desconto ({appliedCoupon?.code})</span>
+                                    <span>- R$ {discountAmount.toFixed(2).replace('.', ',')}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between text-sm text-text-muted">
                                 <span>Entrega</span>
                                 <span className={isFreeDelivery ? "text-success font-semibold" : ""}>

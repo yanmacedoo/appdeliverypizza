@@ -41,6 +41,58 @@ export function MenuEditor({ isOpen, onClose }: MenuEditorProps) {
 
     const [showConfirmInit, setShowConfirmInit] = useState(false);
 
+    // Dynamic Categories states
+    const [tempCategories, setTempCategories] = useState<{ id: string; title: string }[]>([]);
+    const [showAddCategory, setShowAddCategory] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [deletingCategory, setDeletingCategory] = useState<{ id: string; title: string; count: number } | null>(null);
+
+    const handleAddCategory = () => {
+        if (!newCategoryName.trim()) return;
+
+        // Create clean slug ID
+        const id = newCategoryName
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)+/g, '');
+
+        if (categories.some(c => c.id === id) || tempCategories.some(tc => tc.id === id)) {
+            alert('Uma categoria com este nome já existe!');
+            return;
+        }
+
+        setTempCategories([...tempCategories, { id, title: newCategoryName.trim() }]);
+        setNewCategoryName('');
+        setShowAddCategory(false);
+        setExpandedCategory(id); // auto-expand the new category
+    };
+
+    const confirmDeleteCategory = async () => {
+        if (!deletingCategory) return;
+        setSaving(true);
+        try {
+            const realCat = categories.find(c => c.id === deletingCategory.id);
+            if (realCat && realCat.items.length > 0) {
+                const deletePromises = realCat.items.map(item => deleteMenuItem(item.id));
+                await Promise.all(deletePromises);
+            }
+
+            setTempCategories(prev => prev.filter(tc => tc.id !== deletingCategory.id));
+            setDeletingCategory(null);
+            
+            if (expandedCategory === deletingCategory.id) {
+                setExpandedCategory(null);
+            }
+        } catch (error) {
+            console.error('Erro ao deletar categoria:', error);
+            alert('Erro ao deletar categoria.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
 
 
     const handleStartEdit = (item: Product, categoryId: string, categoryTitle: string) => {
@@ -175,6 +227,15 @@ export function MenuEditor({ isOpen, onClose }: MenuEditorProps) {
         }
     };
 
+    const displayCategories = [
+        ...categories,
+        ...tempCategories.filter(tc => !categories.some(c => c.id === tc.id)).map(tc => ({
+            id: tc.id,
+            title: tc.title,
+            items: []
+        }))
+    ];
+
     if (!isOpen) return null;
 
     return (
@@ -199,7 +260,7 @@ export function MenuEditor({ isOpen, onClose }: MenuEditorProps) {
                             disabled={initializing}
                             className="px-3 py-2 text-xs bg-yellow-500/20 text-yellow-500 rounded-lg hover:bg-yellow-500/30 disabled:opacity-50"
                         >
-                            {initializing ? 'Inicializando...' : 'Inicializar do Estático'}
+                            {initializing ? 'Initializing...' : 'Inicializar do Estático'}
                         </button>
                         <button
                             onClick={onClose}
@@ -212,7 +273,50 @@ export function MenuEditor({ isOpen, onClose }: MenuEditorProps) {
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {categories.length === 0 ? (
+                    {/* Add Category Section */}
+                    <div className="glass-card rounded-xl p-4 flex flex-col gap-3">
+                        {!showAddCategory ? (
+                            <button
+                                onClick={() => setShowAddCategory(true)}
+                                className="flex items-center justify-center gap-2 w-full py-3 bg-primary/20 text-primary border border-dashed border-primary/40 rounded-xl font-semibold hover:bg-primary/30 transition-all text-sm"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Criar Nova Categoria no Cardápio
+                            </button>
+                        ) : (
+                            <div className="space-y-3 animate-in slide-in-from-top-2 duration-200">
+                                <h4 className="text-sm font-semibold text-text">Nova Categoria</h4>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newCategoryName}
+                                        onChange={e => setNewCategoryName(e.target.value)}
+                                        placeholder="Nome da categoria (ex: Entradas, Sobremesas, Bebidas Importadas)"
+                                        className="flex-1 bg-surface-light border border-white/10 rounded-xl px-4 py-2.5 text-text text-sm focus:outline-none focus:border-primary/50"
+                                        autoFocus
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') handleAddCategory();
+                                        }}
+                                    />
+                                    <button
+                                        onClick={handleAddCategory}
+                                        disabled={!newCategoryName.trim()}
+                                        className="px-4 py-2 bg-primary text-background font-bold rounded-xl hover:bg-primary-hover transition-colors text-sm disabled:opacity-50"
+                                    >
+                                        Criar
+                                    </button>
+                                    <button
+                                        onClick={() => { setShowAddCategory(false); setNewCategoryName(''); }}
+                                        className="px-4 py-2 bg-surface-light text-text-muted rounded-xl hover:text-text hover:bg-white/5 transition-all text-sm"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {displayCategories.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-text-muted p-8 text-center animate-in fade-in zoom-in duration-300">
                             <div className="bg-surface-light p-4 rounded-full mb-4">
                                 <Database className="w-12 h-12 text-yellow-500 opacity-80" />
@@ -231,27 +335,47 @@ export function MenuEditor({ isOpen, onClose }: MenuEditorProps) {
                             </button>
                         </div>
                     ) : (
-                        categories.map(category => (
+                        displayCategories.map(category => (
                             <div key={category.id} className="glass-card rounded-xl overflow-hidden">
                                 {/* Category Header */}
-                                <button
-                                    onClick={() => setExpandedCategory(
-                                        expandedCategory === category.id ? null : category.id
+                                <div className="w-full flex items-center justify-between bg-surface-light border-b border-white/5 pr-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setExpandedCategory(
+                                            expandedCategory === category.id ? null : category.id
+                                        )}
+                                        className="flex-1 p-4 flex items-center justify-between hover:bg-surface transition-colors text-left"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <span className="font-semibold text-text">{category.title}</span>
+                                            <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-full">
+                                                {category.items.length} itens
+                                            </span>
+                                        </div>
+                                        {expandedCategory === category.id ? (
+                                            <ChevronUp className="w-5 h-5 text-text-muted" />
+                                        ) : (
+                                            <ChevronDown className="w-5 h-5 text-text-muted" />
+                                        )}
+                                    </button>
+                                    {!['tradicionais', 'tradicionais-especiais', 'doces', 'premium', 'bebidas'].includes(category.id) && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDeletingCategory({
+                                                    id: category.id,
+                                                    title: category.title,
+                                                    count: category.items.length
+                                                });
+                                            }}
+                                            className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors ml-2"
+                                            title="Excluir Categoria"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
                                     )}
-                                    className="w-full p-4 flex items-center justify-between bg-surface-light hover:bg-surface transition-colors"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span className="font-semibold text-text">{category.title}</span>
-                                        <span className="text-xs bg-primary/20 text-primary px-2 py-1 rounded-full">
-                                            {category.items.length} itens
-                                        </span>
-                                    </div>
-                                    {expandedCategory === category.id ? (
-                                        <ChevronUp className="w-5 h-5 text-text-muted" />
-                                    ) : (
-                                        <ChevronDown className="w-5 h-5 text-text-muted" />
-                                    )}
-                                </button>
+                                </div>
 
                                 {/* Category Items */}
                                 {expandedCategory === category.id && (
@@ -440,17 +564,45 @@ export function MenuEditor({ isOpen, onClose }: MenuEditorProps) {
                                                     placeholder="Descrição / ingredientes"
                                                     className="w-full bg-surface-light border border-white/10 rounded-lg px-3 py-2 text-text text-sm resize-none h-16"
                                                 />
+                                                {/* Seletor de Tipo (apenas para categorias customizadas) */}
+                                                {!['tradicionais', 'tradicionais-especiais', 'doces', 'premium', 'bebidas'].includes(category.id) && (
+                                                    <div className="space-y-1">
+                                                        <label className="text-xs text-text-muted">Tipo de Item</label>
+                                                        <select
+                                                            value={editForm.type || 'pizza'}
+                                                            onChange={e => {
+                                                                const type = e.target.value as 'pizza' | 'drink';
+                                                                setEditForm({
+                                                                    ...editForm,
+                                                                    type,
+                                                                    visualPattern: type === 'pizza' ? 'cheese' : undefined,
+                                                                    patternColors: type === 'pizza' ? { primary: '#fcc419', secondary: '#fff4e6' } : undefined,
+                                                                    image: type === 'drink'
+                                                                        ? 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=400&auto=format&fit=crop'
+                                                                        : 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?q=80&w=400&auto=format&fit=crop'
+                                                                });
+                                                            }}
+                                                            className="w-full bg-surface-light border border-white/10 rounded-lg px-3 py-2 text-text text-sm focus:outline-none"
+                                                        >
+                                                            <option value="pizza">Pizza (Com opções de Sabores/Meio a Meio)</option>
+                                                            <option value="drink">Outro (Bebidas, Sobremesas, Entradas - direto ao carrinho)</option>
+                                                        </select>
+                                                    </div>
+                                                )}
                                                 {/* Só mostra seletor de padrão para pizzas */}
-                                                {category.id !== 'bebidas' && (
-                                                    <select
-                                                        value={editForm.visualPattern || 'cheese'}
-                                                        onChange={e => setEditForm({ ...editForm, visualPattern: e.target.value as PatternType })}
-                                                        className="w-full bg-surface-light border border-white/10 rounded-lg px-3 py-2 text-text text-sm"
-                                                    >
-                                                        {PATTERN_OPTIONS.map(pattern => (
-                                                            <option key={pattern} value={pattern}>{pattern}</option>
-                                                        ))}
-                                                    </select>
+                                                {editForm.type === 'pizza' && (
+                                                    <div className="space-y-1">
+                                                        <label className="text-xs text-text-muted">Padrão Visual da Pizza</label>
+                                                        <select
+                                                            value={editForm.visualPattern || 'cheese'}
+                                                            onChange={e => setEditForm({ ...editForm, visualPattern: e.target.value as PatternType })}
+                                                            className="w-full bg-surface-light border border-white/10 rounded-lg px-3 py-2 text-text text-sm focus:outline-none"
+                                                        >
+                                                            {PATTERN_OPTIONS.map(pattern => (
+                                                                <option key={pattern} value={pattern}>{pattern}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
                                                 )}
                                                 <div className="flex justify-end gap-2">
                                                     <button
@@ -543,6 +695,48 @@ export function MenuEditor({ isOpen, onClose }: MenuEditorProps) {
                                     className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                                 >
                                     Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Modal de Confirmação de Exclusão de Categoria */}
+            {
+                deletingCategory && (
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+                        <div
+                            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                            onClick={() => setDeletingCategory(null)}
+                        />
+                        <div className="relative bg-surface rounded-xl p-6 max-w-sm mx-4 shadow-2xl">
+                            <h3 className="text-lg font-bold text-text mb-2">Excluir Categoria?</h3>
+                            <p className="text-text-muted mb-6">
+                                Tem certeza que deseja excluir a categoria <strong className="text-text">{deletingCategory.title}</strong>?
+                                {deletingCategory.count > 0 && (
+                                    <>
+                                        <br /><br />
+                                        <span className="text-red-400 font-semibold">
+                                            Isso excluirá permanentemente todos os {deletingCategory.count} itens contidos nesta categoria!
+                                        </span>
+                                    </>
+                                )}
+                            </p>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => setDeletingCategory(null)}
+                                    className="px-4 py-2 text-text-muted hover:text-text transition-colors"
+                                    disabled={saving}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={confirmDeleteCategory}
+                                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-bold disabled:opacity-50"
+                                    disabled={saving}
+                                >
+                                    {saving ? 'Excluindo...' : 'Excluir Categoria'}
                                 </button>
                             </div>
                         </div>

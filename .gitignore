@@ -28,3 +28,10 @@ dist-ssr
 
 # Vite cache
 .vite/
+
+# Env secrets
+.env
+.env.*
+*.env
+functions/.env
+functions/.env.*

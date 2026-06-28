@@ -15,77 +15,73 @@ interface MenuState {
 // Helper function to merge Firebase updates with static menu
 // Firebase data overrides prices/descriptions AND can add new items
 function mergeWithStaticMenu(firebaseItems: MenuItemData[]): Category[] {
-    // Create a map of Firebase items by ID for quick lookup
-    const firebaseMap = new Map<string, MenuItemData>();
+    const categoriesMap = new Map<string, Category>();
+
+    // Initialize map with static categories
+    staticMenu.forEach(cat => {
+        categoriesMap.set(cat.id, {
+            ...cat,
+            items: [...cat.items]
+        });
+    });
+
     const usedFirebaseIds = new Set<string>();
 
+    // Update existing static items
     firebaseItems.forEach(item => {
-        firebaseMap.set(item.id, item);
-    });
-
-    // Clone and update static menu with Firebase data
-    const mergedCategories = staticMenu.map(category => {
-        // Update existing items from static menu
-        const updatedItems = category.items.map(item => {
-            const firebaseItem = firebaseMap.get(item.id);
-            if (firebaseItem) {
+        const category = categoriesMap.get(item.categoryId);
+        if (category) {
+            const itemIndex = category.items.findIndex(i => i.id === item.id);
+            if (itemIndex > -1) {
                 usedFirebaseIds.add(item.id);
-                // Override with Firebase values
-                return {
-                    ...item,
-                    name: firebaseItem.name || item.name,
-                    description: firebaseItem.description || item.description,
-                    price: firebaseItem.price ?? item.price,
-                    available: firebaseItem.available !== undefined ? firebaseItem.available : item.available,
-                    // Merge options if present
-                    options: item.options?.map(opt => {
-                        const firebaseOpt = firebaseItem.options?.find(fo => fo.id === opt.id);
-                        // Explicitly check for boolean false to ensure we hide items
-                        const isAvailable = firebaseOpt?.available !== undefined
-                            ? firebaseOpt.available
-                            : (opt.available ?? true);
-
-                        return {
-                            ...opt,
-                            available: isAvailable
-                        };
-                    })
+                category.items[itemIndex] = {
+                    ...category.items[itemIndex],
+                    name: item.name,
+                    description: item.description,
+                    price: item.price,
+                    available: item.available !== false,
+                    options: item.options
                 };
             }
-            return item;
-        });
-
-        // Add new items from Firebase that belong to this category
-        const newItems: Product[] = [];
-        firebaseItems.forEach(fbItem => {
-            if (fbItem.categoryId === category.id && !usedFirebaseIds.has(fbItem.id)) {
-                usedFirebaseIds.add(fbItem.id);
-                newItems.push({
-                    id: fbItem.id,
-                    name: fbItem.name,
-                    description: fbItem.description,
-                    price: fbItem.price,
-                    type: fbItem.type,
-                    image: fbItem.image,
-                    visualPattern: fbItem.visualPattern,
-                    patternColors: fbItem.patternColors,
-                    available: fbItem.available,
-                    options: fbItem.options
-                });
-            }
-        });
-
-        // Combine and sort alphabetically by name
-        const allItems = [...updatedItems, ...newItems];
-        allItems.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-
-        return {
-            ...category,
-            items: allItems
-        };
+        }
     });
 
-    return mergedCategories;
+    // Add new items and handle dynamic new categories
+    firebaseItems.forEach(item => {
+        if (!usedFirebaseIds.has(item.id)) {
+            usedFirebaseIds.add(item.id);
+
+            if (!categoriesMap.has(item.categoryId)) {
+                categoriesMap.set(item.categoryId, {
+                    id: item.categoryId,
+                    title: item.categoryTitle,
+                    items: []
+                });
+            }
+
+            const category = categoriesMap.get(item.categoryId)!;
+            category.items.push({
+                id: item.id,
+                name: item.name,
+                description: item.description || '',
+                price: item.price,
+                type: item.type,
+                image: item.image || '',
+                visualPattern: item.visualPattern,
+                patternColors: item.patternColors,
+                available: item.available !== false,
+                options: item.options
+            });
+        }
+    });
+
+    // Sort items alphabetically in each category
+    const finalCategories = Array.from(categoriesMap.values()).map(category => {
+        category.items.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+        return category;
+    });
+
+    return finalCategories;
 }
 
 export const useMenuStore = create<MenuState>((set, get) => ({

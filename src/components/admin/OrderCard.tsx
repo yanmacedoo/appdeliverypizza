@@ -13,13 +13,15 @@ import {
     Printer,
     FileText,
     StickyNote,
-    DollarSign
+    DollarSign,
+    Edit
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Order, OrderStatus } from '../../types/order';
 import { orderStatusConfig } from '../../types/order';
 import { updateOrderStatus, updateOrder } from '../../services/orderService';
 import type { Timestamp } from 'firebase/firestore';
+import { EditOrderModal } from './EditOrderModal';
 
 interface OrderCardProps {
     order: Order;
@@ -38,6 +40,7 @@ export function OrderCard({ order, orderNumber }: OrderCardProps) {
     const [updating, setUpdating] = useState(false);
     const [isEditingNote, setIsEditingNote] = useState(false);
     const [noteDraft, setNoteDraft] = useState(order.note || '');
+    const [isEditingOrder, setIsEditingOrder] = useState(false);
 
     const statusConfig = orderStatusConfig[order.status];
 
@@ -342,6 +345,12 @@ Bom apetite! <3`;
                                 <span>Subtotal:</span>
                                 <span>R$ {order.subtotal.toFixed(2).replace('.', ',')}</span>
                             </div>
+                            {order.discount !== undefined && order.discount > 0 && (
+                                <div className="flex justify-between text-green-400 font-medium">
+                                    <span>Desconto {order.couponCode ? `(${order.couponCode})` : ''}:</span>
+                                    <span>- R$ {order.discount.toFixed(2).replace('.', ',')}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between text-text-muted">
                                 <span>Entrega:</span>
                                 <span>{order.deliveryFee === 0 ? 'GRÁTIS' : `R$ ${order.deliveryFee.toFixed(2).replace('.', ',')}`}</span>
@@ -358,6 +367,14 @@ Bom apetite! <3`;
                         <div className="flex items-center justify-between mb-3">
                             <h4 className="text-sm font-semibold text-text-muted">Alterar Status</h4>
                             <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setIsEditingOrder(true)}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-primary/20 text-primary rounded-lg text-sm font-medium hover:bg-primary/30 transition-colors"
+                                    title="Editar Pedido"
+                                >
+                                    <Edit className="w-4 h-4" />
+                                    Editar
+                                </button>
                                 <button
                                     onClick={() => setIsEditingNote(!isEditingNote)}
                                     className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm font-medium hover:bg-yellow-500/30 transition-colors"
@@ -409,6 +426,12 @@ Bom apetite! <3`;
                     </div>
                 </div>
             )}
+            
+            <EditOrderModal
+                isOpen={isEditingOrder}
+                onClose={() => setIsEditingOrder(false)}
+                order={order}
+            />
         </div>
     );
 }
